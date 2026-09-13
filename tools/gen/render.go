@@ -58,24 +58,35 @@ func structs(prefix string, ns []Node) []string {
 }
 
 // comment 는 한글명·필수·길이·설명을 한 줄로 만든다.
+//
+// 스펙 원문에 개행이 섞인 필드가 있다(예: ka10043 의 종목코드 설명 —
+// "거래소별 종목코드\n(KRX:...)"). 그대로 `// ...` 뒤에 붙이면 둘째 줄이 주석
+// 밖으로 새어나가 생성물이 깨진다. oneLine 으로 모든 공백(개행 포함)을 한 칸으로
+// 접어 한 줄 주석을 보장한다.
 func comment(n Node) string {
+	korean := oneLine(n.Korean)
 	var bits []string
 	if n.Required == "Y" {
 		bits = append(bits, "필수")
 	}
 	if n.Length != "" {
-		bits = append(bits, n.Length+"자")
+		bits = append(bits, oneLine(n.Length)+"자")
 	}
 	if n.Description != "" {
-		bits = append(bits, n.Description)
+		bits = append(bits, oneLine(n.Description))
 	}
 	if len(bits) == 0 {
-		return n.Korean
+		return korean
 	}
-	if n.Korean == "" {
+	if korean == "" {
 		return strings.Join(bits, ", ")
 	}
-	return fmt.Sprintf("%s (%s)", n.Korean, strings.Join(bits, ", "))
+	return fmt.Sprintf("%s (%s)", korean, strings.Join(bits, ", "))
+}
+
+// oneLine 은 개행을 포함한 연속 공백을 한 칸으로 접는다.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 var tmpl = template.Must(template.New("api").Funcs(template.FuncMap{

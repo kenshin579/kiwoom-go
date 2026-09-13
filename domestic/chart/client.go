@@ -1,0 +1,12 @@
+// Package chart 는 키움 국내주식 차트 API 그룹이다.
+package chart
+
+import "github.com/kenshin579/kiwoom-go/internal/transport"
+
+// Client 는 차트 하위 클라이언트.
+type Client struct {
+	http *transport.Client
+}
+
+// New 는 kiwoom.NewClient 가 호출한다.
+func New(hc *transport.Client) *Client { return &Client{http: hc} }

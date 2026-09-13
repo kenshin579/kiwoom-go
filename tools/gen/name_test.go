@@ -13,6 +13,7 @@ func TestGoName(t *testing.T) {
 		"bid_req_base_tm":          "BidReqBaseTm",
 		"stk_cd":                   "StkCd",
 		"sel_10th_pre_req_pre":     "Sel10thPreReqPre", // 숫자로 시작하는 조각
+		"250hgst":                  "N250hgst",         // 전체가 숫자로 시작 → N 접두
 		"api_id":                   "APIID",            // 린트가 문제 삼는 것만 올린다
 		"item_url":                 "ItemURL",
 		"http_status":              "HTTPStatus",
