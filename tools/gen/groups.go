@@ -7,7 +7,11 @@ type Group struct {
 	Menu   string // 스펙의 "메뉴 위치" 앞 두 단계. 예: "국내주식 > 시세"
 	Market string // "domestic" | "overseas"
 	Pkg    string // 패키지 이름. 예: "quote"
-	Field  string // 루트 Clients 의 필드 이름. 예: "DomesticQuote"
+	// 루트 Clients 의 필드 이름. 예: "DomesticQuote"
+	//
+	// 대문자 표기는 손으로 정한다 — GoName 의 규칙(_ 로 나눠 첫 글자만 대문자)을
+	// 따르지 않는다. "DomesticELW"·"DomesticETF" 를 GoName 에 맡기면 "DomesticElw" 가 된다.
+	Field  string
 	Korean string // doc 주석용. 예: "국내주식 시세"
 }
 
