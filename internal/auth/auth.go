@@ -15,6 +15,13 @@ import (
 // 호출 도중 만료돼 401 을 받는 것보다, 조금 일찍 받는 편이 싸다.
 const refreshMargin = 60 * time.Second
 
+// fallbackTTL 은 expires_dt 를 읽지 못했을 때 쓰는 보수적 수명.
+//
+// 캐시를 아예 포기하면 호출마다 새로 발급해 발급 한도를 조용히 태운다. 짧게 잡아 두면
+// 실제 만료가 더 이르더라도 전송 계층이 401 에서 한 번 재발급하므로 안전하다.
+// 실효 캐시 구간은 여기서 refreshMargin 을 뺀 값이다.
+const fallbackTTL = 10 * time.Minute
+
 var kst = time.FixedZone("KST", 9*60*60)
 
 // Source 는 토큰을 캐시하는 발급기. 동시 호출에 안전하다.
@@ -87,8 +94,8 @@ func (s *Source) Token(ctx context.Context) (string, error) {
 
 	exp, err := time.ParseInLocation("20060102150405", out.ExpiresDt, kst)
 	if err != nil {
-		// 만료 시각을 못 읽으면 캐시하지 않는다 — 만료된 토큰을 계속 쓰는 것보다 낫다.
-		return out.Token, nil
+		// 형식이 바뀌었더라도 캐시는 유지한다(§fallbackTTL 참고).
+		exp = time.Now().Add(fallbackTTL)
 	}
 	s.token, s.expiresAt = out.Token, exp
 	return s.token, nil

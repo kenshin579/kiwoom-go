@@ -90,3 +90,34 @@ func TestToken_발급실패(t *testing.T) {
 		t.Fatal("에러여야 한다")
 	}
 }
+
+func TestToken_HTTP200이어도_returncode가_오류면_실패다(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 키움은 업무 오류를 200 으로 보낸다 — 상태코드만 보면 놓친다
+		_, _ = w.Write([]byte(`{"return_code":3,"return_msg":"appkey 오류","token":""}`))
+	}))
+	defer srv.Close()
+
+	s := auth.New(srv.URL, "AK", "SK", srv.Client())
+	if _, err := s.Token(context.Background()); err == nil {
+		t.Fatal("에러여야 한다")
+	}
+}
+
+func TestToken_만료시각을_못읽어도_캐시한다(t *testing.T) {
+	var calls int32
+	srv := server(t, "형식이-깨진-값", &calls)
+	defer srv.Close()
+
+	s := auth.New(srv.URL, "AK", "SK", srv.Client())
+	for i := 0; i < 3; i++ {
+		tok, err := s.Token(context.Background())
+		if err != nil || tok != "T1" {
+			t.Fatalf("Token = %q, %v", tok, err)
+		}
+	}
+	// 캐시를 포기하면 3번 발급한다 — 그러면 발급 한도를 조용히 태운다.
+	if calls != 1 {
+		t.Errorf("발급 호출 = %d, want 1 (보수적 수명으로 캐시해야 한다)", calls)
+	}
+}
