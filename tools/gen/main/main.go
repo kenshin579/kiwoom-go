@@ -62,6 +62,15 @@ func main() {
 			continue
 		}
 
+		reqTree, err := gen.BuildTree(api.Request.Body)
+		if err != nil {
+			log.Fatalf("%s(%s) 요청 트리: %v", id, menu, err)
+		}
+		resTree, err := gen.BuildTree(api.Response.Body)
+		if err != nil {
+			log.Fatalf("%s(%s) 응답 트리: %v", id, menu, err)
+		}
+
 		target := gen.Target{
 			Package:  pkg,
 			GoName:   gen.GoName(name),
@@ -69,8 +78,8 @@ func main() {
 			APIName:  api.Meta["API 명"],
 			MenuPath: menu,
 			Path:     api.Meta["URL"],
-			Request:  gen.BuildTree(api.Request.Body),
-			Response: gen.BuildTree(api.Response.Body),
+			Request:  reqTree,
+			Response: resTree,
 		}
 		src, err := gen.Render(target)
 		if err != nil {

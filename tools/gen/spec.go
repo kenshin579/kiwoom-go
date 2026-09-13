@@ -3,6 +3,7 @@ package gen
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -30,7 +31,12 @@ type Node struct {
 // 스펙은 중첩을 depth 숫자로만 나타낸다 — LIST 필드 뒤에 오는 **더 깊은** 필드들이 그
 // 원소의 멤버다. 같거나 얕은 깊이가 나오면 그 목록은 끝난 것이다.
 // 응답은 최대 3단계(0·1·2)이고 depth 2 필드가 611개 있어 재귀가 필요하다.
-func BuildTree(fs []Field) []Node {
+//
+// 컨테이너로 인정하는 것은 `LIST` 뿐이다. 그 밖의 타입(`Object`·`List<Map>`)이 자식을
+// 달고 있으면 **에러**를 돌려준다 — 예전에는 그 자식들을 현재 깊이로 끌어올렸는데,
+// 그러면 최상위 형제로 조용히 옮겨붙어 구조가 틀린 채 생성물이 나왔다.
+// 스펙 전체에 "진짜 깊이 건너뛰기" 는 0건이므로, 이 에러는 정당한 입력을 막지 않는다.
+func BuildTree(fs []Field) ([]Node, error) {
 	// 섹션 헤더는 문서 표의 구분선이지 필드가 아니다.
 	clean := make([]Field, 0, len(fs))
 	for _, f := range fs {
@@ -39,30 +45,37 @@ func BuildTree(fs []Field) []Node {
 		}
 		clean = append(clean, f)
 	}
-	nodes, _ := build(clean, 0, 0)
-	return nodes
+	nodes, _, err := build(clean, 0, 0)
+	return nodes, err
 }
 
 // build 는 i 부터 depth 인 형제들을 모으고, 다음에 볼 위치를 돌려준다.
-func build(fs []Field, i, depth int) ([]Node, int) {
+func build(fs []Field, i, depth int) ([]Node, int, error) {
 	var out []Node
 	for i < len(fs) {
 		f := fs[i]
 		if f.Depth < depth {
-			return out, i
+			return out, i, nil
 		}
 		if f.Depth > depth {
-			// 스펙이 한 단계를 건너뛴 경우. 버리지 않고 현재 깊이로 끌어올린다.
-			f.Depth = depth
+			// 여기 오는 것은 LIST 가 아닌 필드가 자식을 달고 있다는 뜻이다.
+			// 끌어올려 붙이면 구조가 조용히 틀어지므로 멈춘다.
+			return nil, i, fmt.Errorf(
+				"gen: %q(depth %d)가 depth %d 자리에 나왔다 — 앞선 필드가 LIST 가 아닌데 자식을 갖는다(Object·List<Map> 등). 이 타입을 다루도록 build 를 넓히거나 해당 API 를 범위에서 빼라",
+				f.Element, f.Depth, depth)
 		}
 		n := Node{Field: f, IsList: f.Type == "LIST"}
 		i++
 		if n.IsList {
-			n.Children, i = build(fs, i, depth+1)
+			var err error
+			n.Children, i, err = build(fs, i, depth+1)
+			if err != nil {
+				return nil, i, err
+			}
 		}
 		out = append(out, n)
 	}
-	return out, i
+	return out, i, nil
 }
 
 // API 는 스펙의 API 한 건.
