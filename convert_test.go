@@ -50,7 +50,9 @@ func TestInt(t *testing.T) {
 		{"0012", 12, true},
 		{"1,234", 1234, true},
 		{"", 0, false},
-		{"12.34", 0, false}, // 정수가 아니다
+		{"12.34", 0, false},                 // 정수가 아니다
+		{"999999999999999999999", 0, false}, // int64 초과 — 조용히 잘리면 안 된다
+		{"-999999999999999999999", 0, false},
 	}
 	for _, c := range cases {
 		got, ok := kiwoom.IntOK(c.in)
