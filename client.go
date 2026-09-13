@@ -2,8 +2,10 @@ package kiwoom
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/kenshin579/kiwoom-go/internal/auth"
 	"github.com/kenshin579/kiwoom-go/internal/transport"
@@ -28,6 +30,10 @@ func NewClient(appKey, secretKey string, opts ...Option) (*Client, error) {
 	for _, fn := range opts {
 		fn(&o)
 	}
+	// WithBaseURL("") 이 요청을 상대 경로로 만들지 않도록 되돌린다(toss-go 와 같은 가드).
+	if o.baseURL == "" {
+		o.baseURL = ProdBaseURL
+	}
 	hc := o.httpClient
 	if hc == nil {
 		hc = &http.Client{Timeout: o.timeout}
@@ -41,12 +47,20 @@ func NewClient(appKey, secretKey string, opts ...Option) (*Client, error) {
 //
 //	KIWOOM_APP_KEY     앱키(필수)
 //	KIWOOM_SECRET_KEY  시크릿키(필수)
-//	KIWOOM_ENV         "mock" 이면 모의투자. 그 외/미설정이면 운영
+//	KIWOOM_ENV         "mock" 이면 모의투자, "prod" 또는 미설정이면 운영(대소문자 무시)
+//
+// 알 수 없는 KIWOOM_ENV 값은 **에러**다. 오타(`"moc"`)를 조용히 운영으로 떨어뜨리면
+// 사용자가 모의투자로 믿고 실거래 서버를 치게 된다 — 시작하지 못하는 편이 낫다.
 //
 // 명시한 opts 가 환경변수를 이긴다 — 환경변수 옵션을 맨 앞에 넣기 때문이다.
 func NewClientFromEnv(opts ...Option) (*Client, error) {
-	if os.Getenv("KIWOOM_ENV") == "mock" {
+	switch env := strings.ToLower(strings.TrimSpace(os.Getenv("KIWOOM_ENV"))); env {
+	case "", "prod":
+		// 운영(기본)
+	case "mock":
 		opts = append([]Option{WithMock()}, opts...)
+	default:
+		return nil, fmt.Errorf("kiwoom: KIWOOM_ENV 값을 알 수 없다: %q (mock 또는 prod)", env)
 	}
 	return NewClient(os.Getenv("KIWOOM_APP_KEY"), os.Getenv("KIWOOM_SECRET_KEY"), opts...)
 }
