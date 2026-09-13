@@ -9,17 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/kenshin579/kiwoom-go/tools/gen"
 )
-
-// groups 는 이번 단계에서 생성할 카테고리와 그 출력 패키지다.
-var groups = map[string]string{
-	"국내주식 > 시세":   "quote",
-	"국내주식 > 차트":   "chart",
-	"국내주식 > 종목정보": "stock",
-}
 
 func main() {
 	spec, err := gen.LoadSpec("spec/kiwoom_api_spec.json")
@@ -29,6 +21,30 @@ func main() {
 	names, err := gen.LoadNames("spec/api_names.json")
 	if err != nil {
 		log.Fatalf("이름표 읽기: %v", err)
+	}
+
+	// 패키지 디렉터리를 먼저 만들고 client.go 를 찍는다.
+	for _, g := range gen.Groups {
+		dir := filepath.Join("..", g.Market, g.Pkg)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			log.Fatalf("%s 만들기: %v", dir, err)
+		}
+		src, err := gen.RenderSubClient(g)
+		if err != nil {
+			log.Fatalf("%s client.go 렌더: %v", g.Pkg, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "client.go"), src, 0o644); err != nil {
+			log.Fatalf("%s client.go 쓰기: %v", dir, err)
+		}
+	}
+
+	// 루트 배선.
+	src, err := gen.RenderClients(gen.Groups)
+	if err != nil {
+		log.Fatalf("subclients 렌더: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join("..", "subclients.go"), src, 0o644); err != nil {
+		log.Fatalf("subclients.go 쓰기: %v", err)
 	}
 
 	counts := map[string]int{}
@@ -45,18 +61,17 @@ func main() {
 	for _, k := range keys {
 		api := spec.APIs[k]
 		menu := api.Meta["메뉴 위치"]
-		pkg := ""
-		for prefix, p := range groups {
-			if strings.HasPrefix(menu, prefix) {
-				pkg = p
-				break
+		id := api.Meta["API ID"]
+
+		g, ok := gen.Lookup(menu)
+		if !ok {
+			if gen.Skipped(menu) {
+				continue
 			}
-		}
-		if pkg == "" {
-			continue
+			// 표에도 제외 목록에도 없으면 멈춘다 — 새 카테고리가 조용히 빠지면 안 된다.
+			log.Fatalf("표에 없는 카테고리: %q (API %s). tools/gen/groups.go 에 넣거나 제외 목록에 적어라", menu, id)
 		}
 
-		id := api.Meta["API ID"]
 		name, ok := names[id]
 		if !ok {
 			missing = append(missing, id)
@@ -72,8 +87,16 @@ func main() {
 			log.Fatalf("%s(%s) 응답 트리: %v", id, menu, err)
 		}
 
-		target := gen.Target{
-			Package:  pkg,
+		out := filepath.Join("..", g.Market, g.Pkg, name+".go")
+		// 이름이 겹치면 조용히 덮어쓴다 — 이름표 없음은 멈추면서 중복은 안 멈추면
+		// API 하나가 소리 없이 사라진다.
+		if prev, dup := seen[out]; dup {
+			log.Fatalf("이름 충돌: %s 와 %s 가 같은 파일 %s 을 쓴다", prev, id, out)
+		}
+		seen[out] = id
+
+		code, err := gen.Render(gen.Target{
+			Package:  g.Pkg,
 			GoName:   gen.GoName(name),
 			APIID:    id,
 			APIName:  api.Meta["API 명"],
@@ -81,27 +104,24 @@ func main() {
 			Path:     api.Meta["URL"],
 			Request:  reqTree,
 			Response: resTree,
-		}
-		src, err := gen.Render(target)
+		})
 		if err != nil {
 			log.Fatalf("%s 렌더: %v", id, err)
 		}
-		out := filepath.Join("..", "domestic", pkg, name+".go")
-		// 이름이 겹치면 조용히 덮어쓴다 — 이름표 없음은 멈추면서 중복은 안 멈추면
-		// 2단계에서 API 하나가 소리 없이 사라진다.
-		if prev, dup := seen[out]; dup {
-			log.Fatalf("이름 충돌: %s 와 %s 가 같은 파일 %s 을 쓴다", prev, id, out)
-		}
-		seen[out] = id
-		if err := os.WriteFile(out, src, 0o644); err != nil {
+		if err := os.WriteFile(out, code, 0o644); err != nil {
 			log.Fatalf("%s 쓰기: %v", out, err)
 		}
-		counts[pkg]++
+		counts[g.Market+"/"+g.Pkg]++
 	}
 
-	for _, p := range []string{"quote", "chart", "stock"} {
-		fmt.Printf("%s: %d개\n", p, counts[p])
+	total := 0
+	for _, g := range gen.Groups {
+		key := g.Market + "/" + g.Pkg
+		fmt.Printf("%-24s %3d개\n", key, counts[key])
+		total += counts[key]
 	}
+	fmt.Printf("%-24s %3d개\n", "합계", total)
+
 	if len(missing) > 0 {
 		// 이름표가 없으면 멈춘다. api-id 로 대충 이름을 지으면 나중에 바꿀 수 없다.
 		log.Fatalf("이름표 없는 API %d개: %v", len(missing), missing)
