@@ -17,7 +17,6 @@ import (
 // subclients.go 에 있다.
 type Client struct {
 	baseURL string
-	http    *transport.Client
 
 	Clients
 }
@@ -48,7 +47,6 @@ func NewClient(appKey, secretKey string, opts ...Option) (*Client, error) {
 	tr := transport.New(o.baseURL, hc, tok)
 	return &Client{
 		baseURL: o.baseURL,
-		http:    tr,
 		Clients: newClients(tr),
 	}, nil
 }
