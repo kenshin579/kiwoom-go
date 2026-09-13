@@ -1703,8 +1703,11 @@ func Render(t Target) ([]byte, error) {
 	return src, nil
 }
 
-// structs 는 노드 목록을 Go 구조체 본문과, LIST 가 만드는 추가 구조체들로 펼친다.
-func structs(prefix string, ns []Node) (body string, extra string) {
+// structs 는 노드 목록을 [구조체 본문, LIST 가 만드는 추가 구조체들] 로 펼친다.
+//
+// 슬라이스로 돌려주는 이유: text/template 의 FuncMap 은 다중 반환을 받지 못한다.
+// 템플릿에서 `index $x 0` / `index $x 1` 로 꺼낸다.
+func structs(prefix string, ns []Node) []string {
 	var b, x strings.Builder
 	for _, n := range ns {
 		name := GoName(n.Element)
@@ -1721,7 +1724,7 @@ func structs(prefix string, ns []Node) (body string, extra string) {
 		}
 		fmt.Fprintf(&b, "\t%s string `json:%q`\n", name, n.Element)
 	}
-	return b.String(), x.String()
+	return []string{b.String(), x.String()}
 }
 
 // comment 는 한글명·필수·길이·설명을 한 줄로 만든다.
@@ -1786,11 +1789,6 @@ func (c *Client) {{.GoName}}(ctx context.Context, req {{.GoName}}Request, opts .
 }
 `))
 ```
-
-**`structs` 가 두 값을 돌려주므로 템플릿에서 `index` 로 꺼낸다.** Go 템플릿은 다중 반환을
-직접 못 받아서, `structs` 를 `[2]string` 대신 `[]string` 으로 돌려주도록 시그니처를 맞춘다 —
-즉 위 구현의 `structs` 를 `func structs(prefix string, ns []Node) []string` 로 바꾸고
-`return []string{b.String(), x.String()}` 로 끝낸다. 테스트는 그대로 통과해야 한다.
 
 `transport.Option` 은 연속조회를 넘기기 위한 것이다. `internal/transport` 에 추가한다:
 
@@ -2155,5 +2153,5 @@ EOF
 - 이름 일관성: `transport.Client`·`transport.Request`·`transport.Meta`·`transport.Option`(Task 5·9),
   `auth.Source`(Task 4), `gen.Field`·`gen.Node`·`gen.BuildTree`·`gen.GoName`·`gen.Target`·
   `gen.Render`(Task 8·9), `kiwoom.NewClient`·`NewClientFromEnv`·`WithMock`(Task 6).
-- Task 9 Step 6 에 `structs` 의 반환형을 `[]string` 으로 바꾸라는 지시가 본문에 섞여 있다.
-  구현자는 **처음부터 `[]string` 으로 쓰는 것이 맞다** — 템플릿이 `index` 로 꺼내기 때문이다.
+- `structs` 는 처음부터 `[]string` 을 돌려준다 — `text/template` 의 FuncMap 이 다중 반환을
+  받지 못하기 때문이다. 템플릿은 `index $x 0`(구조체 본문)·`index $x 1`(추가 구조체)로 꺼낸다.
