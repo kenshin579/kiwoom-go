@@ -62,7 +62,8 @@
 | **미국 소계** | | **121** |
 | **합** | | **227** |
 
-국내는 `domestic/` 아래, 미국은 `overseas/` 아래로 간다.
+국내는 기존 `domestic/` 아래에, 미국은 **새로 만드는 `overseas/`** 아래로 간다.
+1단계 설계 §5 가 "2단계에서 `미국주식` 이 `overseas/` 로 들어올 자리를 비워 둔다" 고 적어 둔 그 자리다.
 
 ## 4. 전송 계층 — 재시도를 걷어낸다
 
@@ -119,6 +120,10 @@ func newClients(tr *transport.Client) Clients { … }
 똑같이 동작하고, 3단계에서 패키지가 더 늘어도 사람이 할 일이 없다.
 
 1단계의 하위 클라이언트 3개도 생성물로 바뀐다 — 손으로 쓴 파일이 21개에서 18개로 준다.
+
+**손으로 쓴 `client.go` 에서는 `DomesticQuote`·`DomesticChart`·`DomesticStock` **필드를 지우고**
+`Clients` 임베딩으로 대체한다. `NewClient` 의 반환부도 `Clients: newClients(tr)` 로 바꾼다.
+사용자 코드(`c.DomesticQuote.…`)는 임베딩 덕에 **그대로 동작한다** — 외부 모듈 빌드로 확인한다.
 
 **필드 이름은 `<시장><카테고리>`** 다(`DomesticQuote`·`OverseasRanking`). 시장이 다르면
 카테고리가 겹쳐도(`ranking` 이 양쪽에 있다) 구분된다.
