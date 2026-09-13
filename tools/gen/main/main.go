@@ -86,10 +86,16 @@ func main() {
 
 		out := filepath.Join("..", g.Market, g.Pkg, name+".go")
 		// 이름이 겹치면 멈춘다. 안 멈추면 API 하나가 덮어써져 소리 없이 사라진다.
-		if prev, dup := seen[out]; dup {
-			log.Fatalf("이름 충돌: %s 와 %s 가 같은 파일 %s 을 쓴다", prev, id, out)
+		//
+		// 키가 출력 경로가 아니라 GoName 인 이유: GoName 은 단사가 아니다 —
+		// get_a_b 와 get_a__b 가 둘 다 GetAB 가 되고, 약어 표(API·ID 등)도 서로 다른
+		// 이름을 합친다. 경로로만 보면 이런 충돌이 여기를 통과해 300개 파일 어딘가에서
+		// "타입 중복 선언" 컴파일 에러로 터진다 — 여기서 또렷하게 멈추는 편이 낫다.
+		key := g.Market + "/" + g.Pkg + "." + gen.GoName(name)
+		if prev, dup := seen[key]; dup {
+			log.Fatalf("이름 충돌: %s 와 %s 가 같은 타입 이름 %s 을 쓴다(%s)", prev, id, key, out)
 		}
-		seen[out] = id
+		seen[key] = id
 
 		code, err := gen.Render(gen.Target{
 			Package:  g.Pkg,
@@ -169,11 +175,27 @@ func main() {
 
 // cleanGenerated 는 root 아래에서 생성물 헤더가 붙은 .go 파일을 지우고 개수를 돌려준다.
 //
-// 루트와 각 그룹 디렉터리만 본다 — internal/·tools/ 로 내려가지 않는다.
+// 루트와 두 시장 디렉터리의 하위 디렉터리만 본다 — internal/·tools/ 로 내려가지 않는다.
+//
+// 청소 대상을 Groups 표가 아니라 **glob** 으로 훑는 이유: 표에서 그룹을 빼면 그 디렉터리가
+// 청소 대상에서도 함께 빠져, 컴파일되는 유령 패키지가 남는다. subclients.go 는 그 그룹 없이
+// 다시 생성되므로 아무도 안 보는 죽은 export 가 된다.
 func cleanGenerated(root string) (int, error) {
 	dirs := []string{root}
-	for _, g := range gen.Groups {
-		dirs = append(dirs, filepath.Join(root, g.Market, g.Pkg))
+	for _, market := range []string{"domestic", "overseas"} {
+		// 시장 디렉터리가 아직 없을 수도 있다(빈 트리에서 첫 생성). 그때는 건너뛴다.
+		ents, err := os.ReadDir(filepath.Join(root, market))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return 0, err
+		}
+		for _, e := range ents {
+			if e.IsDir() {
+				dirs = append(dirs, filepath.Join(root, market, e.Name()))
+			}
+		}
 	}
 	n := 0
 	for _, dir := range dirs {
