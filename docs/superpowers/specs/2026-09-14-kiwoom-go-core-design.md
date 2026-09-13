@@ -76,16 +76,26 @@
 
 ```
 kiwoom-go/
-  client.go          인증·전송·연속조회           ← 손으로
-  config.go          appkey/secretkey, 도메인, env  ← 손으로
-  errors.go          APIError + 오류코드 37         ← 손으로
-  convert.go         문자열 변환 헬퍼               ← 손으로
-  internal/spec/     스펙 JSON 사본 + 이름표 + 파서 ← 손으로(데이터는 벤더링)
-  cmd/gen/           생성기                        ← 손으로
-  domestic/quote/    시세 25개                     ← 생성
-  domestic/chart/    차트 21개                     ← 생성
-  domestic/stock/    종목정보 31개                 ← 생성
+  client.go            루트 Client·하위 클라이언트 노출   ← 손으로
+  config.go            appkey/secretkey, 도메인, env      ← 손으로
+  errors.go            APIError + 오류코드 37             ← 손으로
+  convert.go           문자열 변환 헬퍼                   ← 손으로
+  internal/transport/  POST·api-id·연속조회·에러 매핑     ← 손으로
+  internal/auth/       토큰 발급·갱신                     ← 손으로
+  domestic/quote/      시세 25개                          ← 생성
+  domestic/chart/      차트 21개                          ← 생성
+  domestic/stock/      종목정보 31개                      ← 생성
+
+  tools/               **별도 Go 모듈** (라이브러리에 포함되지 않음)
+    go.mod
+    spec/kiwoom_api_spec.json   공식 스펙 사본(3.7MB)
+    spec/api_names.json         api-id → 공식 영문명
+    gen/                        생성기
 ```
+
+**생성기와 스펙 데이터는 `tools/` 아래 별도 모듈**로 둔다. 같은 모듈에 넣으면 라이브러리를
+`go get` 하는 모든 사람이 **쓰지도 않는 3.7MB JSON 을 내려받는다.** `tools/go.mod` 가 있으면
+부모 모듈이 그 하위 트리를 통째로 제외한다.
 
 패키지는 스펙의 `메뉴 위치` 2단계를 따른다(`국내주식 > 시세` → `domestic/quote`). 2단계에서
 `미국주식` 이 `overseas/` 로 들어올 자리를 지금부터 비워 둔다.
@@ -104,8 +114,8 @@ kiwoom-go/
 
 입력은 저장소에 **벤더링한** 두 파일이다.
 
-- `internal/spec/kiwoom_api_spec.json` — 공식 스펙 사본(가져온 커밋 SHA 를 README 에 적는다)
-- `internal/spec/api_names.json` — `api-id → 공식 영문명` 표(예제 362개에서 1회 추출)
+- `tools/spec/kiwoom_api_spec.json` — 공식 스펙 사본(가져온 커밋 SHA 를 README 에 적는다)
+- `tools/spec/api_names.json` — `api-id → 공식 영문명` 표(예제 362개에서 1회 추출)
 
 빌드나 생성 때 원격을 받아오지 않는다. 재현 가능해야 하고, 키움이 스펙을 바꾸면 **의도적인
 갱신 커밋**으로 드러나는 편이 낫다.
@@ -130,8 +140,9 @@ type GetDomesticStockQuoteResponse struct {
 }
 ```
 
-`depth` 가 중첩을 만든다 — `depth:0` 의 `LIST` 필드가 슬라이스가 되고 `depth:1` 자식들이 그
-원소 구조체가 된다. `한글명`·`required`·`length`·`description` 은 doc 주석으로 남긴다.
+`depth` 가 중첩을 만든다 — `LIST` 필드가 슬라이스가 되고 뒤따르는 더 깊은 필드들이 그 원소
+구조체가 된다. **응답은 최대 3단계(depth 0·1·2)** 이고 depth 2 필드가 611개 있으므로,
+한 단계만 다루는 구현은 틀린다. 재귀로 처리한다. `한글명`·`required`·`length`·`description` 은 doc 주석으로 남긴다.
 
 ### 6.1 이름 규칙 — 예외를 만들지 않는다
 
