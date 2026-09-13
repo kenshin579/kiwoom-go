@@ -32,6 +32,7 @@ func main() {
 	}
 
 	counts := map[string]int{}
+	seen := map[string]string{}
 	var missing []string
 
 	// 맵 순회 순서가 달라도 결과가 같도록 키를 정렬한다.
@@ -86,6 +87,12 @@ func main() {
 			log.Fatalf("%s 렌더: %v", id, err)
 		}
 		out := filepath.Join("..", "domestic", pkg, name+".go")
+		// 이름이 겹치면 조용히 덮어쓴다 — 이름표 없음은 멈추면서 중복은 안 멈추면
+		// 2단계에서 API 하나가 소리 없이 사라진다.
+		if prev, dup := seen[out]; dup {
+			log.Fatalf("이름 충돌: %s 와 %s 가 같은 파일 %s 을 쓴다", prev, id, out)
+		}
+		seen[out] = id
 		if err := os.WriteFile(out, src, 0o644); err != nil {
 			log.Fatalf("%s 쓰기: %v", out, err)
 		}
