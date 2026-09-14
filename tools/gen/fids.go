@@ -289,8 +289,8 @@ var Fids = []Fid{
 	{"903", "CumulativeExecutedAmount", "체결누계금액"},
 	{"904", "OriginalOrderNumber", "원주문번호"},
 	{"905", "OrderType", "주문구분"},
-	{"906", "TradeType", "매매구분"},
-	{"907", "TradeSide", "매도/수 구분"}, // 표기 차이: 매도수구분. 01·02 또는 1·2 로 오는 매도/매수 구분 코드
+	{"906", "OrderPriceType", "매매구분"}, // 방향이 아니라 주문 호가 유형이다 — 스펙 값이 보통·시장가·조건부지정가·IOC·FOK. 907 TradeSide 와 헷갈리면 안 된다
+	{"907", "TradeSide", "매도/수 구분"},   // 표기 차이: 매도수구분. 01·02 또는 1·2 로 오는 매도/매수 구분 코드
 	{"908", "OrderExecutionTime", "주문/체결시간"},
 	{"909", "ExecutionNumber", "체결번호"},
 	{"910", "ExecutionPrice", "체결가"},
@@ -436,7 +436,7 @@ var Fids = []Fid{
 	{"10010", "AfterHoursSinglePriceCurrentPrice", "시간외단일가_현재가"},
 	{"13006", "Fee", "수수료 사용"},
 	{"50072", "TradeSideName", "매도수구분명"},
-	{"50073", "TradeTypeName", "매매구분명"},
+	{"50073", "OrderPriceTypeName", "매매구분명"}, // 906 의 텍스트값. 스펙: "텍스트값(지정가, 시장가 등...)"
 	{"50724", "RealizedProfitPurchaseAmount", "실현손익매입금 사용"},
 	{"50725", "CurrencyConvertedRealizedProfitPurchaseAmount", "환전실현손익매입금액 사용"}, // 환전 = 통화 환산. 거래소(Exchange) 가 아니다
 	{"50810", "OrderStopPrice", "주문STOP가격"},
