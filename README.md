@@ -266,7 +266,11 @@ _, err = c.DomesticCondition.StopDomesticRealtimeConditionSearch(ctx, /* ... */)
 `RequestDomesticRealtimeConditionSearch` 를 다시 불러 등록을 새로 세워야 한다.
 
 **미국 조건검색(`usa20290`)의 푸시는 `Raw` 뿐이다.** `ev.Value`(`OverseasRealtimeConditionMatch`)
-는 늘 영값이고 받은 FID 는 전부 `ev.Raw` 에 있다 — 예: `ev.Raw["9001"]`.
+는 늘 영값이고 받은 FID 는 전부 `ev.Raw` 에 들어 있다.
+
+**어떤 FID 가 오는지는 이 라이브러리도 모른다.** 국내 짝(`ka10173`)이 보내는 키를 미뤄
+짐작할 수는 있지만 확인된 것이 아니므로 여기에 예시 키를 적지 않는다. 먼저 받은 것을
+그대로 찍어 보고(`for k, v := range ev.Raw`) 무엇이 오는지 눈으로 확인한 뒤 쓰라.
 
 이것은 **"푸시를 지원하지 않는다" 가 아니라 "이름표가 없다"** 다. 푸시는 실제로 오고 값도 다
 들어 있다. 다만 스펙에 그 FID 들의 한글명 표가 통째로 비어 있어(공식 예제도 `COLUMNS = {}` 에
