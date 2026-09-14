@@ -72,14 +72,7 @@ var wsSubClientTmpl = template.Must(template.New("wssubclient").Parse(
 // Package {{.Pkg}} 는 키움 {{.Korean}} API 그룹이다. WebSocket 위에서 돈다.
 package {{.Pkg}}
 
-import (
-	"github.com/kenshin579/kiwoom-go/internal/wstransport"
-
-	// 실시간 이벤트 봉투는 stream 패키지 하나에만 산다. 이 파일은 직접 쓰지 않지만
-	// 같은 패키지의 실시간 생성물이 stream.Event 를 돌려준다 — 봉투를 여기서 다시
-	// 정의하지 않는다는 표시로 남겨 둔다.
-	_ "github.com/kenshin579/kiwoom-go/stream"
-)
+import "github.com/kenshin579/kiwoom-go/internal/wstransport"
 
 // defaultBuffer 는 구독 채널 버퍼 크기다.
 //

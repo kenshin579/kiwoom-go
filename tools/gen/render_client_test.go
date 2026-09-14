@@ -93,7 +93,6 @@ func TestRenderSubClient_WebSocket(t *testing.T) {
 				"ws *wstransport.Conn",
 				"func New(ws *wstransport.Conn) *Client",
 				"const defaultBuffer = ",
-				`"github.com/kenshin579/kiwoom-go/stream"`,
 			} {
 				if !strings.Contains(got, want) {
 					t.Errorf("%q 가 없다\n---\n%s", want, got)
