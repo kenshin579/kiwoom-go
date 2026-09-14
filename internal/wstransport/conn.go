@@ -104,6 +104,11 @@ type Conn struct {
 	subMu sync.Mutex
 	subs  map[subKey][]*sub
 	regs  []*registration // 재연결 때 다시 보낼 등록. 해지되면 여기서도 빠진다
+	// condSubs 는 살아 있는 조건검색 구독 수다(SubscribeCondition).
+	//
+	// 있고 없고만 본다 — 0 이면 routeReal 이 푸시마다 841 을 꺼내는 일을 건너뛴다.
+	// regs 와 달리 재연결이 되살릴 수 없는 등록이라 여기에만 남는다.
+	condSubs int
 
 	// reqMu 는 요청 대기자를 지킨다. 짝짓기 열쇠가 trnm 뿐이라 trnm 당 한 건이다.
 	reqMu sync.Mutex

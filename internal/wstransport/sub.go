@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -207,6 +208,12 @@ func (c *Conn) closeSubs(ss []*sub, ch chan Delivery) {
 	for _, s := range ss {
 		if !s.closed {
 			already = false
+			// 조건검색 자리는 센다. 이 수가 0 이면 routeReal 이 841 을 꺼내지 않는다 —
+			// 내리는 것을 빠뜨리면 조건검색을 한 번 쓴 연결이 그 뒤로 영원히 실시간
+			// 푸시마다 맵 하나를 더 만든다.
+			if s.key.typ == conditionType {
+				c.condSubs--
+			}
 		}
 		s.closed = true
 		list := c.subs[s.key]
@@ -235,7 +242,21 @@ func (c *Conn) routeReal(env envelope) {
 	for _, p := range payloads {
 		c.subMu.Lock()
 		list := append([]*sub(nil), c.subs[subKey{p.Type, p.Item}]...)
+		cond := c.condSubs > 0
 		c.subMu.Unlock()
+
+		// 조건검색 푸시는 같은 REAL 메시지로 오지만 (타입, 종목)으로 갈리지 않는다.
+		// 열쇠는 values 의 841(일련번호)이다 — conditionKey 의 주석 참고.
+		//
+		// 조건검색 구독이 하나도 없으면 풀지 않는다. 실시간 푸시는 초당 여러 건이 오는데
+		// 아무도 듣지 않는 열쇠를 꺼내자고 그때마다 맵을 하나씩 만들 이유가 없다.
+		if cond {
+			if seq := fieldOf(p.Values, condSeqFID); seq != "" {
+				c.subMu.Lock()
+				list = append(list, c.subs[conditionKey(seq)]...)
+				c.subMu.Unlock()
+			}
+		}
 		for _, s := range list {
 			c.deliver(s, Delivery{
 				Type: p.Type, Name: p.Name, Item: p.Item,
@@ -298,4 +319,100 @@ func (c *Conn) flushNotices(s *sub) bool {
 		}
 	}
 	return true
+}
+
+// conditionType 은 조건검색 구독 자리의 타입 열쇠다.
+//
+// 실시간 항목 코드가 **아니다.** 실시간 코드는 두 글자(0B·S2…)라 이 낱말과 부딪힐 수
+// 없고, 그래서 (타입, 종목) 지도에 함께 살아도 서로를 가리지 않는다.
+//
+// 사람이 읽는 문장에 그대로 나온다("kiwoom: 조건검색/4 구독이 느려…"). 그 자리에
+// "__cond" 같은 내부 표식이 나오면 사용자는 자기가 만들지 않은 무언가를 본 것이 된다.
+const conditionType = "조건검색"
+
+// condSeqFID 는 조건검색 푸시에서 조건검색식 일련번호를 싣는 FID 다.
+//
+// tools/gen/fids.go 의 표에서는 SequenceNumber(일련번호)다. 스펙의 ka10173 실시간 절과
+// usa20290 응답 예제가 둘 다 이 자리에 요청의 seq 를 그대로 돌려준다.
+const condSeqFID = "841"
+
+// conditionKey 는 조건검색 푸시의 라우팅 열쇠다.
+//
+// 실시간은 (타입, 종목)으로 갈리지만 조건검색은 그럴 수가 없다 — 푸시의 type 은
+// 02(국내)·S2(미국) 고정이고, 종목은 편입·이탈이 일어나야 정해져 구독 시점에는 모른다.
+// 갈리는 것은 **조건검색식 일련번호** 하나뿐이다.
+func conditionKey(seq string) subKey { return subKey{typ: conditionType, item: seq} }
+
+// errNoSeq 는 일련번호 없이 조건검색 푸시를 받으려 했다는 뜻이다.
+//
+// errNoItems 와 같은 이유로 거절한다. 빈 열쇠로는 어떤 푸시도 짝이 맞지 않아 채널이
+// 영영 조용하고, 소비자는 "조건에 걸린 종목이 없다" 와 구분하지 못한다.
+var errNoSeq = errors.New("kiwoom: 조건검색식 일련번호가 비어 있다 — 라우팅 열쇠가 없어 푸시가 한 건도 오지 않는다")
+
+// SubscribeCondition 은 조건검색 편입·이탈 푸시를 받는다.
+//
+// **등록 패킷(REG)을 보내지 않는다.** 조건검색은 CNSRREQ(ka10173)·GCNSRREQ(usa20290)
+// 요청 자체가 등록이다. 여기서 하는 일은 라우팅을 붙이는 것뿐이다. 해지도 REMOVE 가
+// 아니라 CNSRCLR(ka10174)·GCNSRCLR(usa20291) 요청으로 따로 보낸다.
+//
+// 그래서 **재연결이 이 등록을 복구하지 못한다.** c.regs 에 넣지 않는 이유가 그것이다 —
+// 넣어 봐야 REG 로는 되살릴 수 없는 등록이라, 다시 붙은 뒤 조용히 REG 를 흘리면 사용자는
+// 복구된 줄 알고 오지 않는 푸시를 기다린다. 대신 다른 구독과 똑같이 *GapError 가 온다.
+// 그 신호를 받으면 요청을 다시 보내는 것은 호출자의 몫이다.
+//
+// ctx 가 취소되거나 연결이 닫히면 라우팅을 떼고 채널을 닫는다. 채널이 가득 찰 때의
+// 처리(*SlowConsumerError)와 구멍 래치는 실시간 구독과 **같은 코드**를 탄다 —
+// 조건검색만 구멍을 숨기지 않는다.
+func (c *Conn) SubscribeCondition(ctx context.Context, seq string, buf int) (<-chan Delivery, error) {
+	if seq == "" {
+		return nil, errNoSeq
+	}
+	if buf < 1 {
+		buf = 1
+	}
+	// 여기서는 ensureConnected 를 부르지 않는다. 호출자가 방금 같은 소켓으로 요청을
+	// 보냈으니 연결은 이미 서 있고, 그 사이에 끊겼다면 새로 다이얼하는 것보다 자리를
+	// 잡아 두는 편이 낫다 — 다시 붙는 즉시 *GapError 가 이 채널로 온다.
+	ch := make(chan Delivery, buf)
+	s := &sub{key: conditionKey(seq), ch: ch}
+
+	c.subMu.Lock()
+	if c.subs == nil {
+		c.subs = map[subKey][]*sub{}
+	}
+	c.subs[s.key] = append(c.subs[s.key], s)
+	c.condSubs++
+	c.subMu.Unlock()
+
+	life := c.lifeCtx()
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-life.Done():
+		}
+		c.closeSubs([]*sub{s}, ch)
+	}()
+	return ch, nil
+}
+
+// fieldOf 는 values 에서 FID 하나를 문자열로 꺼낸다. 없으면 빈 문자열이다.
+//
+// map[string]string 으로 한 번에 풀지 않는다. 그러면 값 하나라도 숫자로 오는 순간
+// 맵 전체가 파싱에 실패해 라우팅이 통째로 멈춘다 — 푸시는 계속 오는데 아무에게도
+// 닿지 않는, 가장 알아채기 어려운 종류의 침묵이 된다.
+func fieldOf(values json.RawMessage, fid string) string {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(values, &m); err != nil {
+		return ""
+	}
+	raw, ok := m[fid]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		// 문자열이 아니면 원문 그대로 쓴다. 841 이 4 로 와도 "4" 로 라우팅된다.
+		return strings.TrimSpace(string(raw))
+	}
+	return s
 }
