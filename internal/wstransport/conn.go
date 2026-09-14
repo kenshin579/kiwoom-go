@@ -54,6 +54,15 @@ type Conn struct {
 	life   context.Context    // 연결의 수명. Connect 의 ctx 와 **다르다**
 	stop   context.CancelFunc // Close 가 부른다
 	closed bool               // Close 뒤에는 재연결하지 않는다
+
+	// subMu 는 구독 지도를 지킨다. 수신 고루틴과 호출자 고루틴이 함께 만진다.
+	subMu sync.Mutex
+	subs  map[subKey][]*sub
+	regs  []registration // 재연결 때 다시 보낼 등록(Task 4 가 읽는다)
+
+	// reqMu 는 요청 대기자를 지킨다. 짝짓기 열쇠가 trnm 뿐이라 trnm 당 한 건이다.
+	reqMu sync.Mutex
+	reqs  map[string]chan envelope
 }
 
 // New 는 연결기를 만든다. 아직 다이얼하지 않는다.
@@ -163,8 +172,16 @@ func (c *Conn) readLoop(life context.Context, ws *websocket.Conn, done chan stru
 	}
 }
 
-// dispatch 는 Task 3·4 에서 채운다. 지금은 버린다.
-func (c *Conn) dispatch(env envelope) {}
+// dispatch 는 PING 이 아닌 메시지를 요청 대기자 또는 구독자에게 보낸다.
+func (c *Conn) dispatch(env envelope) {
+	if strings.EqualFold(env.Trnm, "REAL") {
+		c.routeReal(env)
+		return
+	}
+	// 요청 응답이 아니면 버린다. REG/REMOVE 의 확인 응답이 여기로 온다 —
+	// 보낼 곳이 없으므로 버리는 것이 맞다.
+	_ = c.routeResponse(env)
+}
 
 // Close 는 연결을 닫는다. 두 번 불러도 안전하다.
 func (c *Conn) Close() error {

@@ -1,0 +1,94 @@
+package wstransport
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+)
+
+var errNotConnected = errors.New("kiwoom: websocket 이 연결되어 있지 않다")
+
+// Request 는 패킷을 보내고 같은 trnm 의 응답을 기다린다.
+//
+// 짝짓기 열쇠가 trnm 뿐이다 — 키움 WS 에는 요청 식별자가 없다. 그래서 같은 trnm 의
+// 요청을 동시에 두 건 보내면 응답이 뒤바뀔 수 있다. 조건검색은 그럴 일이 없지만,
+// 그렇게 쓰지 못하도록 trnm 당 한 건만 대기시킨다.
+//
+// **재전송하지 않는다.** REST 와 같은 규칙이다(설계 §5).
+func (c *Conn) Request(ctx context.Context, trnm string, body any, out any) error {
+	key := strings.ToUpper(trnm)
+
+	waiter := make(chan envelope, 1)
+	c.reqMu.Lock()
+	if c.reqs == nil {
+		c.reqs = map[string]chan envelope{}
+	}
+	if _, busy := c.reqs[key]; busy {
+		c.reqMu.Unlock()
+		return fmt.Errorf("kiwoom: %s 요청이 이미 대기 중이다 — 같은 trnm 을 동시에 보내지 마라", key)
+	}
+	c.reqs[key] = waiter
+	c.reqMu.Unlock()
+
+	defer func() {
+		c.reqMu.Lock()
+		delete(c.reqs, key)
+		c.reqMu.Unlock()
+	}()
+
+	c.mu.Lock()
+	ws := c.ws
+	c.mu.Unlock()
+	if ws == nil {
+		return errNotConnected
+	}
+	if err := writeJSON(ctx, ws, body); err != nil {
+		return err
+	}
+
+	select {
+	case env := <-waiter:
+		// 업무 오류는 return_code != 0 이다. REST 와 같다 — trnm 만 보면 실패를
+		// 성공으로 읽는다.
+		if env.ReturnCode != 0 {
+			return &APIError{Trnm: env.Trnm, ReturnCode: env.ReturnCode, ReturnMsg: env.ReturnMsg}
+		}
+		if out != nil {
+			if err := json.Unmarshal(env.raw, out); err != nil {
+				return fmt.Errorf("kiwoom: %s 응답 파싱 실패: %w", key, err)
+			}
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// APIError 는 업무 오류다. REST 의 transport.APIError 와 같은 자리다 —
+// 성공·실패를 trnm 이 아니라 return_code 로 가른다.
+type APIError struct {
+	Trnm       string // 요청한 trnm(어느 요청이 실패했는지)
+	ReturnCode int    // 본문 return_code
+	ReturnMsg  string // 본문 return_msg
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("kiwoom: %s 실패 (return_code=%d): %s", e.Trnm, e.ReturnCode, e.ReturnMsg)
+}
+
+// routeResponse 는 대기 중인 요청에 응답을 건넨다. 짝이 없으면 false.
+func (c *Conn) routeResponse(env envelope) bool {
+	c.reqMu.Lock()
+	w, ok := c.reqs[strings.ToUpper(env.Trnm)]
+	c.reqMu.Unlock()
+	if !ok {
+		return false
+	}
+	select {
+	case w <- env:
+	default:
+	}
+	return true
+}
