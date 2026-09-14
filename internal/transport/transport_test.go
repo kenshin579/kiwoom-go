@@ -182,3 +182,77 @@ func TestDo_500은_재시도하지_않는다(t *testing.T) {
 		t.Errorf("APIError 에 상태코드와 원문이 있어야 한다: %+v", ae)
 	}
 }
+
+// 서버는 return_code 를 엔드포인트에 따라 int 로도 숫자 문자열로도 보낸다.
+//
+// 예전에는 int 로만 선언하고 봉투 파싱 에러를 버렸다. 그래서 문자열 코드가 오면 봉투가
+// 통째로 영값이 되어 return_code == 0 — **업무 오류가 조용히 성공이 됐다.** 아래 표의
+// "문자열 업무오류" 두 줄이 그때 통과하던 것이고, 지금은 에러여야 한다.
+func TestDo_return_code_는_int_와_숫자문자열을_둘_다_받는다(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantCode int // 0 이면 성공 기대
+	}{
+		{"int 0", `{"return_code":0,"return_msg":"정상"}`, 0},
+		{"문자열 0", `{"return_code":"0","return_msg":"정상"}`, 0},
+		{"앞자리 0 이 붙은 문자열", `{"return_code":"0000","return_msg":"정상"}`, 0},
+		{"필드 없음", `{"bid_req_base_tm":"161000"}`, 0},
+		{"빈 문자열", `{"return_code":"","return_msg":""}`, 0},
+		{"int 업무오류", `{"return_code":8005,"return_msg":"토큰 만료"}`, 8005},
+		{"문자열 업무오류", `{"return_code":"8005","return_msg":"토큰 만료"}`, 8005},
+		{"앞자리 0 이 붙은 업무오류", `{"return_code":"08005","return_msg":"토큰 만료"}`, 8005},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			c := transport.New(srv.URL, srv.Client(), &stubToken{val: "TK"})
+			_, err := c.Do(context.Background(), transport.Request{APIID: "ka10004", Path: "/x"}, nil)
+
+			if tt.wantCode == 0 {
+				if err != nil {
+					t.Fatalf("%s → %v, 기대 성공", tt.body, err)
+				}
+				return
+			}
+			var ae *transport.APIError
+			if !errors.As(err, &ae) {
+				t.Fatalf("%s → %v, 기대 *APIError (업무 오류가 성공으로 통과했다)", tt.body, err)
+			}
+			if ae.ReturnCode != tt.wantCode {
+				t.Errorf("%s → ReturnCode = %d, 기대 %d", tt.body, ae.ReturnCode, tt.wantCode)
+			}
+		})
+	}
+}
+
+// 봉투를 아예 못 읽으면 그 사실이 드러나야 한다. 삼키면 return_code 가 0 으로 남아
+// 업무 오류가 성공이 된다 — 이 저장소가 이미 한 번 밟은 구멍이다.
+func TestDo_봉투를_못_읽으면_에러다(t *testing.T) {
+	for _, body := range []string{
+		`이건 JSON 이 아니다`,
+		`{"return_code":"오류코드"}`,
+		`{"return_code":true}`,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+
+		c := transport.New(srv.URL, srv.Client(), &stubToken{val: "TK"})
+		_, err := c.Do(context.Background(), transport.Request{APIID: "ka10004", Path: "/x"}, nil)
+		srv.Close()
+
+		if err == nil {
+			t.Errorf("%s 가 조용히 통과했다", body)
+			continue
+		}
+		var ae *transport.APIError
+		if !errors.As(err, &ae) || ae.Body == "" {
+			t.Errorf("%s → %v — 원문이 담긴 *APIError 여야 한다", body, err)
+		}
+	}
+}

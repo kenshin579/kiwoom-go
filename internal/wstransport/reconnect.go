@@ -46,6 +46,14 @@ const pendingGapRetry = 50 * time.Millisecond
 //
 // life 는 연결의 수명이다. Close 가 이것을 끊으면 재연결도 멈춘다.
 func (c *Conn) reconnectLoop(life context.Context, since time.Time) {
+	// 깃발은 onReadFailure 가 세우고 여기서 내린다. 내리는 것을 빠뜨리면 게으른 연결이
+	// 영원히 errReconnecting 만 돌려준다 — 그래서 어느 경로로 빠지든 defer 로 내린다.
+	defer func() {
+		c.mu.Lock()
+		c.reconnecting = false
+		c.mu.Unlock()
+	}()
+
 	delay := c.retryDelay
 	if delay <= 0 {
 		delay = defaultRetryDelay

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/kenshin579/kiwoom-go/internal/wire"
 )
 
 // refreshMargin 은 만료 이 시간 전에 미리 갱신한다.
@@ -80,11 +82,14 @@ func (s *Source) Token(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	// ReturnCode 가 wire.Code 인 이유는 두 전송과 같다 — 서버가 엔드포인트에 따라
+	// int 로도 숫자 문자열로도 보낸다. int 로만 선언하면 문자열이 오는 순간 토큰 발급이
+	// "응답 파싱 실패" 로 전부 막힌다.
 	var out struct {
-		Token      string `json:"token"`
-		ExpiresDt  string `json:"expires_dt"`
-		ReturnCode int    `json:"return_code"`
-		ReturnMsg  string `json:"return_msg"`
+		Token      string    `json:"token"`
+		ExpiresDt  string    `json:"expires_dt"`
+		ReturnCode wire.Code `json:"return_code"`
+		ReturnMsg  string    `json:"return_msg"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", fmt.Errorf("kiwoom: 토큰 응답 파싱 실패(HTTP %d): %w", resp.StatusCode, err)

@@ -109,6 +109,12 @@ func (c *Conn) Subscribe(ctx context.Context, typ string, items []string, buf in
 	if buf < 1 {
 		buf = 1
 	}
+	// **연결은 여기서 붙는다.** 사용자는 Connect 를 부르지 않는다 — 부를 방법도 없다
+	// (Conn 은 internal/ 안에 있다). 구독 자리를 잡기 **전에** 붙는 이유는, 실패했을 때
+	// 지도에 남는 찌꺼기가 없어야 하기 때문이다.
+	if err := c.ensureConnected(ctx); err != nil {
+		return nil, err
+	}
 	ch := make(chan Delivery, buf)
 
 	c.subMu.Lock()

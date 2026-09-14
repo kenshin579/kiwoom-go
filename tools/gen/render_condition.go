@@ -21,8 +21,11 @@ type conditionTarget struct {
 // 요청 구조체에서 trnm 을 **뺀다.** 값은 여기서 이미 알고 있고(호출자가 고를 수 있는 것이
 // 아니다), 호출자가 비워 두면 서버 응답이 짝을 찾지 못해 ctx 만료까지 조용히 매단다.
 // 대신 생성된 메서드가 직렬화 직전에 익명 래퍼로 끼워 넣는다 — 아래 conditionTmpl 참고.
+//
+// 응답 구조체에서는 return_code·return_msg 를 뺀다. 이유는 withoutReturnEnvelope 에 있다.
 func RenderCondition(t Target, trnm string) ([]byte, error) {
 	t.Request = withoutTrnm(t.Request)
+	t.Response = withoutReturnEnvelope(t.Response)
 	var buf bytes.Buffer
 	if err := conditionTmpl.Execute(&buf, conditionTarget{Target: t, Trnm: trnm}); err != nil {
 		return nil, err
@@ -41,6 +44,33 @@ func withoutTrnm(ns []Node) []Node {
 	out := make([]Node, 0, len(ns))
 	for _, n := range ns {
 		if n.Element == "trnm" {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// withoutReturnEnvelope 는 응답 필드에서 return_code·return_msg 를 뺀다.
+//
+// 두 가지 이유가 겹친다.
+//
+// 하나는 **틀린 타입**이다. 스펙이 결과코드를 String 으로 적어 두어 생성물이
+// `ReturnCode string` 을 만드는데, 서버는 조건검색 응답의 return_code 를 **int** 로
+// 보낸다. 그대로 두면 응답 파싱이 여섯 건 다 실패한다.
+//
+// 다른 하나는 **중복**이다. 전송 계층(internal/wstransport)이 이미 return_code != 0 을
+// *kiwoom.WSAPIError 로 바꿔 준다. 즉 응답 구조체를 손에 쥐었다는 것은 이미 정상이라는
+// 뜻이고, 스펙도 "정상인 경우는 메시지 없음" 이라 return_msg 는 그때 언제나 비어 있다.
+// 늘 0 과 빈 문자열만 담기는 필드를 공개 표면에 두면, 그것을 보고 성공·실패를 가르려는
+// 사람이 생긴다 — 그 판단은 전송 계층이 이미 내렸다.
+//
+// 최상위만 본다. 봉투는 언제나 응답 본문 맨 위에 있고, data 원소 안의 같은 이름은
+// (있다면) 다른 뜻이다.
+func withoutReturnEnvelope(ns []Node) []Node {
+	out := make([]Node, 0, len(ns))
+	for _, n := range ns {
+		if n.Element == "return_code" || n.Element == "return_msg" {
 			continue
 		}
 		out = append(out, n)
@@ -67,6 +97,11 @@ type {{.GoName}}Request struct {
 {{index $req 0}}}
 
 // {{.GoName}}Response 는 {{.APIName}}({{.APIID}}) 응답이다.
+//
+// return_code·return_msg 는 여기 없다. 전송 계층이 return_code != 0 을 *kiwoom.WSAPIError
+// 로 바꿔 주므로, 이 구조체를 받았다는 것 자체가 이미 정상이라는 뜻이다(정상이면 스펙상
+// return_msg 도 비어 있다). 게다가 스펙은 결과코드를 String 이라 적었지만 서버는 int 로
+// 보내 — 남겨 두면 응답 파싱이 통째로 실패한다.
 type {{.GoName}}Response struct {
 {{index $res 0}}}
 {{index $res 1}}

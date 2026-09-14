@@ -32,6 +32,11 @@ type reqResult struct {
 func (c *Conn) Request(ctx context.Context, trnm string, body any, out any) error {
 	key := strings.ToUpper(trnm)
 
+	// Subscribe 와 같은 자리다 — 조건검색도 첫 호출이 연결을 연다.
+	if err := c.ensureConnected(ctx); err != nil {
+		return err
+	}
+
 	waiter := make(chan reqResult, 1)
 	c.reqMu.Lock()
 	if c.reqs == nil {
@@ -69,7 +74,7 @@ func (c *Conn) Request(ctx context.Context, trnm string, body any, out any) erro
 		// 업무 오류는 return_code != 0 이다. REST 와 같다 — trnm 만 보면 실패를
 		// 성공으로 읽는다.
 		if env.ReturnCode != 0 {
-			return &APIError{Trnm: env.Trnm, ReturnCode: env.ReturnCode, ReturnMsg: env.ReturnMsg}
+			return &APIError{Trnm: env.Trnm, ReturnCode: env.ReturnCode.Int(), ReturnMsg: env.ReturnMsg}
 		}
 		if out != nil {
 			if err := json.Unmarshal(env.raw, out); err != nil {

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/kenshin579/kiwoom-go/internal/wire"
 )
 
 // 도메인. REST 와 달리 포트가 붙는다.
@@ -26,6 +28,13 @@ const (
 
 // errClosed 는 이미 닫힌 연결에 무언가를 붙이려 했다는 뜻이다.
 var errClosed = errors.New("kiwoom: websocket 이 이미 닫혔다")
+
+// errReconnecting 은 끊긴 뒤 다시 붙는 중이라 지금은 보낼 수 없다는 뜻이다.
+//
+// 여기서 새로 다이얼하지 않는다. 재연결 루프가 이미 그 일을 하고 있고, 둘이 함께
+// 다이얼하면 소켓이 둘 생겨 하나가 곧바로 버려진다 — 그 버려지는 쪽에 걸린 등록도 함께
+// 사라진다. 호출자에게 상태를 그대로 알리고 다시 시도하게 하는 편이 정직하다.
+var errReconnecting = errors.New("kiwoom: websocket 이 끊겨 다시 붙는 중이다 — 잠시 뒤 다시 시도하라")
 
 // errBadMessage 는 메시지 **한 건**을 해석하지 못했다는 뜻이다. 연결은 멀쩡하다.
 //
@@ -47,9 +56,14 @@ type TokenSource interface {
 //
 // 업무 오류가 HTTP 200 + return_code 로 오는 REST 와 같은 구조다 — trnm 만으로는
 // 성공·실패를 가를 수 없다.
+//
+// ReturnCode 가 wire.Code 인 이유도 REST 와 같다: 서버가 엔드포인트에 따라 int 로도
+// 숫자 문자열("0000"·"8005")로도 보낸다. int 로만 선언하면 문자열이 오는 순간
+// readEnvelope 이 메시지 전체를 못 읽어 errBadMessage 로 버린다 — 로그인 거부도,
+// 조건검색 업무 오류도 프레임 카운터만 올리고 사라진다.
 type envelope struct {
 	Trnm       string          `json:"trnm"`
-	ReturnCode int             `json:"return_code"`
+	ReturnCode wire.Code       `json:"return_code"`
 	ReturnMsg  string          `json:"return_msg"`
 	Data       json.RawMessage `json:"data"`
 	raw        []byte          // 원문. 조건검색 응답을 그대로 넘길 때 쓴다
@@ -70,12 +84,21 @@ type Conn struct {
 	// retryDelay 와 같은 규칙으로 테스트가 줄인다.
 	connectTimeout time.Duration
 
+	// dialMu 는 다이얼을 한 줄로 세운다. c.mu 와 **따로** 둔다 — 다이얼은 초 단위로
+	// 걸리는데 그동안 c.mu 를 들고 있으면 수신 루프도 Close 도 함께 멈춘다.
+	dialMu sync.Mutex
+
 	mu     sync.Mutex
 	ws     *websocket.Conn
 	done   chan struct{}      // 지금 도는 수신 루프의 종료 신호. Close 가 기다린다
 	life   context.Context    // 연결의 수명. Connect 의 ctx 와 **다르다**
 	stop   context.CancelFunc // Close 가 부른다
 	closed bool               // Close 뒤에는 재연결하지 않는다
+	// reconnecting 은 재연결 루프가 도는 중이라는 뜻이다.
+	//
+	// 게으른 연결(ensureConnected)이 그 루프와 부딪히지 않게 하는 깃발이다.
+	// reconnectLoop 이 시작할 때 서고 끝날 때 내린다.
+	reconnecting bool
 
 	// subMu 는 구독 지도를 지킨다. 수신 고루틴과 호출자 고루틴이 함께 만진다.
 	subMu sync.Mutex
@@ -122,6 +145,45 @@ func (c *Conn) Connect(ctx context.Context) error {
 	c.mu.Unlock()
 
 	return c.connectWithLoginRetry(ctx)
+}
+
+// ensureConnected 는 필요할 때 붙는다. 이미 붙어 있으면 아무것도 하지 않는다.
+//
+// **게으른 연결이 여기 있다.** 예전에는 "첫 구독 때 붙는다" 고 적어 놓고 그 코드가 없어,
+// 생성된 실시간·조건검색 메서드가 전부 errNotConnected 로 떨어졌다. Connect 를 부르는
+// 것은 테스트뿐이었다.
+//
+// sync.Once 를 쓰지 않는다. Once 는 (a) 재연결 뒤 다시 붙어야 하는 것도, (b) 첫 시도가
+// 자격증명 오류로 실패했을 때 다음 호출자가 다시 시도하는 것도 못 한다 — 한 번 돌면
+// 실패했어도 끝이라 그 뒤로는 영원히 "연결 안 됨" 이 된다.
+//
+// 대신 dialMu 로 다이얼을 한 줄로 세운다. 동시에 구독 열 개가 시작해도 첫 번째만
+// 다이얼하고 나머지는 이미 붙은 소켓을 본다 — 연결은 하나다.
+//
+// 실패는 **그대로 돌려준다.** 첫 Subscribe 가 앱키 오류로 실패했다면 사용자가 그 자리에서
+// 알아야 한다. 조용히 삼키고 나중에 다시 붙는 척하면, 아무 이벤트도 오지 않는 이유를
+// 아무도 설명하지 못한다.
+func (c *Conn) ensureConnected(ctx context.Context) error {
+	c.dialMu.Lock()
+	defer c.dialMu.Unlock()
+
+	c.mu.Lock()
+	closed, ws, reconnecting := c.closed, c.ws, c.reconnecting
+	c.mu.Unlock()
+
+	switch {
+	case closed:
+		// Close 뒤에는 다시 붙지 않는다. 닫은 클라이언트가 조용히 되살아나면
+		// 사용자가 끊은 줄 아는 소켓으로 트래픽이 다시 나간다.
+		return errClosed
+	case ws != nil:
+		// 이미 소켓이 있다. 재연결 중이면 그 소켓은 죽어 있을 수 있지만, 그때는
+		// 쓰기가 실패해 호출자에게 알려진다 — 여기서 새로 다이얼할 일은 아니다.
+		return nil
+	case reconnecting:
+		return errReconnecting
+	}
+	return c.Connect(ctx)
 }
 
 // connectWithLoginRetry 는 붙고 로그인한다. 로그인이 거부되면 토큰을 버리고 **로그인만**
@@ -171,7 +233,7 @@ func (c *Conn) connectOnce(ctx context.Context) error {
 	}
 	if env.ReturnCode != 0 {
 		_ = ws.CloseNow()
-		return &LoginError{ReturnCode: env.ReturnCode, ReturnMsg: env.ReturnMsg}
+		return &LoginError{ReturnCode: env.ReturnCode.Int(), ReturnMsg: env.ReturnMsg}
 	}
 
 	c.mu.Lock()
@@ -255,13 +317,18 @@ func (c *Conn) onReadFailure(life context.Context, ws *websocket.Conn) {
 	// 자세한 이유는 failRequests 의 주석에 있다.
 	c.failRequests(errDisconnected)
 
-	c.mu.Lock()
-	closed := c.closed
-	current := c.ws == ws
-	c.mu.Unlock()
-	// closed 면 Close 가 끊은 것이다. current 가 아니면 이미 다른 소켓이 달렸다 —
+	// closed 면 Close 가 끊은 것이다. c.ws != ws 면 이미 다른 소켓이 달렸다 —
 	// 어느 쪽이든 재연결을 띄우면 루프가 둘이 된다.
-	if closed || !current || life.Err() != nil {
+	//
+	// reconnecting 깃발은 루프를 띄우기로 **정한 그 락 안에서** 세운다. 락 밖에서
+	// 세우면 그 틈에 ensureConnected 가 끼어들어 같이 다이얼한다.
+	c.mu.Lock()
+	start := !c.closed && c.ws == ws && life.Err() == nil
+	if start {
+		c.reconnecting = true
+	}
+	c.mu.Unlock()
+	if !start {
 		return
 	}
 	go c.reconnectLoop(life, time.Now())

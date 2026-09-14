@@ -34,6 +34,9 @@ type fakeServer struct {
 
 	// loginCode 는 로그인 응답의 return_code. 0 이 정상.
 	loginCode int
+	// loginCodeRaw 가 nil 이 아니면 loginCode 대신 이 값을 **그대로** 실어 보낸다.
+	// 서버가 return_code 를 숫자 문자열("0000"·"8005")로 보내는 엔드포인트를 흉내낸다.
+	loginCodeRaw any
 	// onConn 은 연결이 열릴 때마다 불린다. 푸시를 밀어 넣거나 끊을 때 쓴다.
 	onConn func(t *testing.T, n int, c *websocket.Conn)
 	// beforeLoginAck 는 로그인 응답을 보내기 **전에** 불린다.
@@ -138,8 +141,12 @@ func newFakeServer(t *testing.T) *fakeServer {
 			<-r.Context().Done() // 응답하지 않고, 끊지도 않는다
 			return
 		}
+		var code any = f.loginCodeFor(login)
+		if f.loginCodeRaw != nil {
+			code = f.loginCodeRaw
+		}
 		_ = f.writeJSON(c, map[string]any{
-			"trnm": "LOGIN", "return_code": f.loginCodeFor(login), "return_msg": "",
+			"trnm": "LOGIN", "return_code": code, "return_msg": "",
 		})
 
 		if f.onConn != nil {

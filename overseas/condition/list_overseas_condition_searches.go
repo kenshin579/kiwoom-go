@@ -12,11 +12,12 @@ type ListOverseasConditionSearchesRequest struct {
 }
 
 // ListOverseasConditionSearchesResponse 는 미국주식 조건검색 목록조회(usa20280) 응답이다.
+//
+// return_code·return_msg 는 여기 없다. 전송 계층이 return_code != 0 을 *kiwoom.WSAPIError
+// 로 바꿔 주므로, 이 구조체를 받았다는 것 자체가 이미 정상이라는 뜻이다(정상이면 스펙상
+// return_msg 도 비어 있다). 게다가 스펙은 결과코드를 String 이라 적었지만 서버는 int 로
+// 보내 — 남겨 두면 응답 파싱이 통째로 실패한다.
 type ListOverseasConditionSearchesResponse struct {
-	// 결과코드 (정상 : 0)
-	ReturnCode string `json:"return_code"`
-	// 결과메시지 (정상인 경우는 메시지 없음)
-	ReturnMsg string `json:"return_msg"`
 	// 서비스명 (GCNSRLT고정값)
 	Trnm string `json:"trnm"`
 	// 조건검색식 목록
