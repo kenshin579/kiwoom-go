@@ -9,6 +9,7 @@ import (
 
 	"github.com/kenshin579/kiwoom-go/internal/auth"
 	"github.com/kenshin579/kiwoom-go/internal/transport"
+	"github.com/kenshin579/kiwoom-go/internal/wstransport"
 )
 
 // Client 는 키움 API 클라이언트다. 하위 클라이언트로 각 API 그룹에 접근한다.
@@ -30,13 +31,17 @@ func NewClient(appKey, secretKey string, opts ...Option) (*Client, error) {
 		return nil, errors.New("kiwoom: secretKey 가 비어 있다")
 	}
 
-	o := options{baseURL: ProdBaseURL, timeout: defaultTimeout}
+	o := options{baseURL: ProdBaseURL, wsBaseURL: ProdWSURL, timeout: defaultTimeout}
 	for _, fn := range opts {
 		fn(&o)
 	}
 	// WithBaseURL("") 이 요청을 상대 경로로 만들지 않도록 되돌린다(toss-go 와 같은 가드).
 	if o.baseURL == "" {
 		o.baseURL = ProdBaseURL
+	}
+	// WS 쪽도 같은 이유로 되돌린다 — 빈 값이면 다이얼 주소가 경로만 남는다.
+	if o.wsBaseURL == "" {
+		o.wsBaseURL = ProdWSURL
 	}
 	hc := o.httpClient
 	if hc == nil {
@@ -45,9 +50,13 @@ func NewClient(appKey, secretKey string, opts ...Option) (*Client, error) {
 
 	tok := auth.New(o.baseURL, appKey, secretKey, hc)
 	tr := transport.New(o.baseURL, hc, tok)
+	// WebSocket 은 시장마다 연결이 하나씩이다(국내·미국). 아직 다이얼하지 않는다 —
+	// 첫 구독 때 붙는다.
+	dom := wstransport.New(o.wsBaseURL, wstransport.DomesticPath, tok)
+	ovs := wstransport.New(o.wsBaseURL, wstransport.OverseasPath, tok)
 	return &Client{
 		baseURL: o.baseURL,
-		Clients: newClients(tr),
+		Clients: newClients(tr, dom, ovs),
 	}, nil
 }
 
