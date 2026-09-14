@@ -21,3 +21,42 @@
 
 원격을 빌드 때 받아오지 않는 이유: 재현 가능해야 하고, 키움이 스펙을 바꾸면
 **의도적인 갱신 커밋**으로 드러나는 편이 낫다.
+
+## WebSocket 규약 (스펙에 없어 예제에서 확인함)
+
+`kiwoom_api_spec.json` 은 api-id 별 메시지만 담는다. 연결을 여는 절차는 없다 —
+`LOGIN`·`PING`·`PONG` 이 스펙 전체에서 **0회**다.
+
+아래는 같은 커밋(`234560d213acd8871ae344b5481aecd2f30287fa`)의 공식 Python 클라이언트에서
+읽은 것이다. **코드를 옮겨 오지 않았다. 규약만 적었다.**
+
+| 사실 | 출처 |
+|---|---|
+| 로그인 패킷 `{"trnm":"LOGIN","token":…}` | `kiwoom/core/ws_client.py` `_login` |
+| 로그인 응답을 먼저 받아야 하고 `return_code != 0` 이면 실패 | 같은 파일 `_await_login_ack` |
+| PING 은 **받은 것을 그대로 echo** | 같은 파일 `_receive_non_ping_message` |
+| 인증 실패 시 토큰 재발급 후 **로그인만** 재시도 | 같은 파일 `connect(retry_on_auth_failure=True)` |
+| REG 패킷의 `item`·`type` 이 **배열** | `examples/국내주식/실시간시세/subscribe_domestic_stock_trade_async.py` |
+| REAL 푸시의 `item` 은 **스칼라**, `values` 는 **맵** | `kiwoom/realtime/decoders.py` 머리말 |
+| `usa20290` 은 푸시가 오지만 FID 표가 비어 있음(`COLUMNS = {}`) | `examples/미국주식/조건검색/request_overseas_realtime_condition_search_async.py` |
+| 미국 조건검색 `trnm` 은 `GCNSRREQ` | 같은 파일 |
+
+메시지 모양:
+
+```json
+// 등록
+{"trnm":"REG","grp_no":"1","refresh":"1","data":[{"item":["005930"],"type":["0B"]}]}
+
+// 푸시
+{"trnm":"REAL","data":[{"type":"0B","name":"주식체결","item":"005930",
+                        "values":{"10":"-82000","20":"093015"}}]}
+```
+
+스펙과 **어긋나는** 곳(이 표가 이긴다):
+
+- 스펙은 REG 의 `item`·`type` 을 depth-1 `String` 으로 적었지만 실제로는 배열이다.
+- 스펙은 `values` 를 실시간 23곳에서 `LIST`, `ka10173` 에서 `Object` 로 적었다.
+  실제는 **맵**이다. `LIST` 쪽이 문서 오류다.
+
+규약을 다시 확인하려면 위 파일들을 같은 커밋에서 읽어라. 원격을 빌드 때 받아오지 않는
+이유는 스펙과 같다 — 재현 가능해야 하고, 바뀌면 의도적인 갱신 커밋으로 드러나야 한다.
