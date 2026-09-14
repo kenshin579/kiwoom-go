@@ -1,23 +1,15 @@
 package kiwoom
 
 import (
-	"time"
-
 	"github.com/kenshin579/kiwoom-go/internal/wstransport"
+	"github.com/kenshin579/kiwoom-go/stream"
 )
 
-// Event 는 실시간 한 건이다.
+// Event 는 실시간 한 건이다. stream.Event 의 별칭이다.
 //
-// Err 이 nil 이 아니면 Value 는 영값이다 — 구멍(*GapError)이나 느린 소비자
-// (*SlowConsumerError)를 알리는 봉투이기 때문이다.
-type Event[T any] struct {
-	Symbol string // 종목코드
-	Name   string // 실시간 항목명
-	Time   time.Time
-	Value  T
-	Raw    map[string]string // 받은 FID 전부. 표에 없는 것도 여기 남는다
-	Err    error
-}
+// 별칭이어야 한다 — 새 타입 정의면 생성물 하위 패키지가 주는 봉투와 다시 갈린다.
+// 루트가 생성물을 import 하므로(subclients.go) 정의는 stream 패키지에 산다.
+type Event[T any] = stream.Event[T]
 
 // 아래는 internal/wstransport 의 타입을 외부에서 이름으로 쓰게 하는 별칭이다.
 //

@@ -57,6 +57,7 @@ import (
 	"encoding/json"
 
 	"github.com/kenshin579/kiwoom-go/internal/wstransport"
+	"github.com/kenshin579/kiwoom-go/stream"
 )
 
 // {{.ValueType}} 는 {{.APIName}}({{.Type}}) 의 실시간 값이다.
@@ -72,12 +73,12 @@ type {{.ValueType}} struct {
 // ctx 를 취소하면 등록을 해제하고 채널을 닫는다. 채널이 가득 차면 이벤트를 버리고
 // *kiwoom.SlowConsumerError 를 흘린다 — 한 구독의 느림이 다른 구독을 굶기지 않는다.
 // 끊겼다 붙으면 *kiwoom.GapError 가 온다. 그 사이 이벤트는 받지 못한 것이다.
-func (c *Client) {{.GoName}}(ctx context.Context, items ...string) (<-chan Event[{{.ValueType}}], error) {
+func (c *Client) {{.GoName}}(ctx context.Context, items ...string) (<-chan stream.Event[{{.ValueType}}], error) {
 	src, err := c.ws.Subscribe(ctx, "{{.Type}}", items, defaultBuffer)
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan Event[{{.ValueType}}], defaultBuffer)
+	out := make(chan stream.Event[{{.ValueType}}], defaultBuffer)
 	go func() {
 		defer close(out)
 		for d := range src {
@@ -87,8 +88,8 @@ func (c *Client) {{.GoName}}(ctx context.Context, items ...string) (<-chan Event
 	return out, nil
 }
 
-func decode{{.ValueType}}(d wstransport.Delivery) Event[{{.ValueType}}] {
-	ev := Event[{{.ValueType}}]{Symbol: d.Item, Name: d.Name, Time: d.Time, Err: d.Err}
+func decode{{.ValueType}}(d wstransport.Delivery) stream.Event[{{.ValueType}}] {
+	ev := stream.Event[{{.ValueType}}]{Symbol: d.Item, Name: d.Name, Time: d.Time, Err: d.Err}
 	if d.Err != nil {
 		return ev
 	}

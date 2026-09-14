@@ -73,9 +73,12 @@ var wsSubClientTmpl = template.Must(template.New("wssubclient").Parse(
 package {{.Pkg}}
 
 import (
-	"time"
-
 	"github.com/kenshin579/kiwoom-go/internal/wstransport"
+
+	// 실시간 이벤트 봉투는 stream 패키지 하나에만 산다. 이 파일은 직접 쓰지 않지만
+	// 같은 패키지의 실시간 생성물이 stream.Event 를 돌려준다 — 봉투를 여기서 다시
+	// 정의하지 않는다는 표시로 남겨 둔다.
+	_ "github.com/kenshin579/kiwoom-go/stream"
 )
 
 // defaultBuffer 는 구독 채널 버퍼 크기다.
@@ -83,19 +86,6 @@ import (
 // 가득 차면 이벤트를 버리고 *kiwoom.SlowConsumerError 를 흘린다. 넉넉히 잡는 이유는
 // 0D(주식호가잔량)처럼 초당 여러 건이 오는 종류가 있기 때문이다.
 const defaultBuffer = 256
-
-// Event 는 실시간 한 건이다. 루트의 kiwoom.Event 와 같은 모양이다.
-//
-// 같은 타입을 두 곳에 두는 이유: 루트가 이 패키지를 import 하므로(subclients.go),
-// 이 패키지는 루트를 import 할 수 없다. 루트의 것은 별칭이 아니라 같은 정의다.
-type Event[T any] struct {
-	Symbol string
-	Name   string
-	Time   time.Time
-	Value  T
-	Raw    map[string]string
-	Err    error
-}
 
 // Client 는 {{.Korean}} 하위 클라이언트다.
 type Client struct {
