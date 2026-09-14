@@ -18,9 +18,9 @@ type DomesticViEvent struct {
 	StockOrSectorCode string `json:"9001"`
 	// 종목명
 	StockName string `json:"302"`
-	// 누적거래량
+	// 누적거래량 (단위: 1주)
 	CumulativeVolume string `json:"13"`
-	// 누적거래대금
+	// 누적거래대금 (단위: 백만원)
 	CumulativeTradeAmount string `json:"14"`
 	// VI발동구분
 	VITriggerType string `json:"9068"`
@@ -28,15 +28,15 @@ type DomesticViEvent struct {
 	MarketType string `json:"9008"`
 	// 장전구분
 	PreMarketType string `json:"9075"`
-	// VI발동가격
+	// VI발동가격 (단위: 원)
 	VITriggerPrice string `json:"1221"`
-	// 매매체결처리시각
+	// 매매체결처리시각 (HHmmss)
 	TradeExecutionProcessTime string `json:"1223"`
-	// VI해제시각
+	// VI해제시각 (HHmmss)
 	VIReleaseTime string `json:"1224"`
-	// VI적용구분
+	// VI적용구분 (정적/동적/동적+정적)
 	VIApplyType string `json:"1225"`
-	// 기준가격 정적
+	// 기준가격 정적 (계약,주)
 	StaticBasePrice string `json:"1236"`
 	// 기준가격 동적
 	DynamicBasePrice string `json:"1237"`

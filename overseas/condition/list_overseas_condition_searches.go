@@ -5,9 +5,10 @@ package condition
 import "context"
 
 // ListOverseasConditionSearchesRequest 는 미국주식 조건검색 목록조회(usa20280) 요청이다.
+//
+// trnm 은 여기 없다. 값이 GCNSRLST 하나로 정해져 있어 호출자가 고를 것이 없고, 비워 두면
+// 서버 응답이 짝을 찾지 못해 ctx 만료까지 조용히 매달린다 — 전송 직전에 아래 메서드가 넣는다.
 type ListOverseasConditionSearchesRequest struct {
-	// TR명 (필수, 8자, GCNSRLST고정값)
-	Trnm string `json:"trnm"`
 }
 
 // ListOverseasConditionSearchesResponse 는 미국주식 조건검색 목록조회(usa20280) 응답이다.
@@ -35,8 +36,15 @@ type ListOverseasConditionSearchesDataItem struct {
 // 메뉴: 미국주식 > 조건검색 > 미국주식 조건검색 목록조회(usa20280)
 // URL:  /api/us/websocket  (trnm: GCNSRLST)
 func (c *Client) ListOverseasConditionSearches(ctx context.Context, req ListOverseasConditionSearchesRequest) (*ListOverseasConditionSearchesResponse, error) {
+	// 익명 래퍼로 trnm 을 끼운다. 임베드한 필드는 encoding/json 이 바깥으로 끌어올리므로
+	// 나가는 본문은 {"trnm":"GCNSRLST", ...req} 가 된다.
+	body := struct {
+		Trnm string `json:"trnm"`
+		ListOverseasConditionSearchesRequest
+	}{Trnm: "GCNSRLST", ListOverseasConditionSearchesRequest: req}
+
 	var out ListOverseasConditionSearchesResponse
-	if err := c.ws.Request(ctx, "GCNSRLST", req, &out); err != nil {
+	if err := c.ws.Request(ctx, "GCNSRLST", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

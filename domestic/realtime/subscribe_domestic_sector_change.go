@@ -14,7 +14,7 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticSectorChange struct {
-	// 체결시간
+	// 체결시간 (HHmmss)
 	TradeTime string `json:"20"`
 	// 상승종목수
 	AdvancingCount string `json:"252"`
@@ -26,21 +26,21 @@ type DomesticSectorChange struct {
 	DecliningCount string `json:"255"`
 	// 하한종목수
 	LowerLimitCount string `json:"254"`
-	// 누적거래량
+	// 누적거래량 (단위: 1주)
 	CumulativeVolume string `json:"13"`
-	// 누적거래대금
+	// 누적거래대금 (단위: 백만원)
 	CumulativeTradeAmount string `json:"14"`
-	// 현재가
+	// 현재가 (단위: 원, 부호가 포함된 숫자)
 	CurrentPrice string `json:"10"`
-	// 전일대비
+	// 전일대비 (단위: 원, 부호가 포함된 숫자)
 	PrevDayDiff string `json:"11"`
-	// 등락율
+	// 등락율 (단위: %, 부호 포함 소수점 둘째 자리까지 포맷된 백분율)
 	ChangeRate string `json:"12"`
-	// 거래형성종목수
+	// 거래형성종목수 (계약,주)
 	TradedStockCount string `json:"256"`
-	// 거래형성비율
+	// 거래형성비율 (단위: %, 소수점 둘째 자리까지 포맷된 백분율)
 	TradedStockRatio string `json:"257"`
-	// 전일대비기호
+	// 전일대비기호 (1: 상한가, 2:상승, 3:보합, 4:하한가, 5:하락)
 	PrevDayDiffSign string `json:"25"`
 }
 

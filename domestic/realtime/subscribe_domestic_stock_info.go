@@ -20,11 +20,11 @@ type DomesticStockInfo struct {
 	PreMarketRandomExtension string `json:"592"`
 	// 장후임의연장
 	PostMarketRandomExtension string `json:"593"`
-	// 상한가
+	// 상한가 (단위: 원, 부호가 포함된 숫자)
 	UpperLimitPrice string `json:"305"`
-	// 하한가
+	// 하한가 (단위: 원, 부호가 포함된 숫자)
 	LowerLimitPrice string `json:"306"`
-	// 기준가
+	// 기준가 (단위: 원)
 	BasePrice string `json:"307"`
 	// 조기종료ELW발생
 	EarlyTerminationELW string `json:"689"`

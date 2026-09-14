@@ -14,47 +14,47 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticBalance struct {
-	// 계좌번호
+	// 계좌번호 (고유 계좌번호 10자리)
 	AccountNumber string `json:"9201"`
 	// 종목코드,업종코드
 	StockOrSectorCode string `json:"9001"`
 	// 신용구분
 	CreditType string `json:"917"`
-	// 대출일
+	// 대출일 (YYYYMMDD)
 	LoanDate string `json:"916"`
 	// 종목명
 	StockName string `json:"302"`
-	// 현재가
+	// 현재가 (단위: 원, 부호가 포함된 숫자)
 	CurrentPrice string `json:"10"`
-	// 보유수량
+	// 보유수량 (단위: 1주)
 	HoldingQuantity string `json:"930"`
-	// 매입단가
+	// 매입단가 (단위: 원)
 	PurchasePrice string `json:"931"`
-	// 총매입가(당일누적)
+	// 총매입가(당일누적) (단위: 원)
 	TotalPurchaseAmountTodayCumulative string `json:"932"`
-	// 주문가능수량
+	// 주문가능수량 (단위: 1주)
 	OrderableQuantity string `json:"933"`
-	// 당일순매수량
+	// 당일순매수량 (단위: 1주)
 	TodayNetBuyQuantity string `json:"945"`
-	// 매도/매수구분
+	// 매도/매수구분 (계약,주)
 	BalanceTradeSide string `json:"946"`
 	// 당일총매도손익
 	TodayTotalSellProfit string `json:"950"`
 	// Extra Item
 	ExtraItem951 string `json:"951"`
-	// (최우선)매도호가
+	// (최우선)매도호가 (단위: 원, 부호가 포함된 숫자)
 	BestAskPrice string `json:"27"`
-	// (최우선)매수호가
+	// (최우선)매수호가 (단위: 원, 부호가 포함된 숫자)
 	BestBidPrice string `json:"28"`
-	// 기준가
+	// 기준가 (단위: 원)
 	BasePrice string `json:"307"`
-	// 손익률(실현손익)
+	// 손익률(실현손익) (단위: %, 부호 포함 소수점 둘째 자리까지 포맷된 백분율)
 	RealizedProfitRate string `json:"8019"`
 	// 신용금액
 	CreditAmount string `json:"957"`
 	// 신용이자
 	CreditInterest string `json:"958"`
-	// 만기일
+	// 만기일 (YYYYMMDD)
 	ExpiryDate string `json:"918"`
 	// 당일실현손익(유가)
 	TodayRealizedProfitSecurities string `json:"990"`

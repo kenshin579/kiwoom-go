@@ -8,10 +8,31 @@ import (
 )
 
 // RealtimeField 는 값 구조체의 필드 하나다.
+//
+// 이름은 표에서 오지만(FID·Name), 나머지는 스펙에서 그대로 싣는다. 설명을 버리면
+// 해독에 필요한 것이 사라진다 — CumulativeTradeAmount 만 보고 "단위: 백만원" 인 줄
+// 알 방법이 없고, 25(전일대비기호)의 "1:상한가, 2:상승…" 같은 코드 도메인도 마찬가지다.
 type RealtimeField struct {
-	FID    string
-	Name   string
-	Korean string
+	FID      string
+	Name     string
+	Korean   string
+	Required string // 스펙의 required 열. REST 의 comment() 와 같은 모양을 내려고 싣는다
+	Length   string // 스펙의 length 열
+	Desc     string // 스펙의 description 열. 개행이 섞여 있어 comment() 의 oneLine 을 반드시 거친다
+}
+
+// Comment 는 REST 생성물과 같은 모양의 한 줄 주석을 만든다.
+//
+// render.go 의 comment() 를 그대로 쓴다 — 두 갈래가 따로 놀면 "REST 는 단위가 적혀 있고
+// 실시간은 없다" 같은 어긋남이 다시 생긴다. oneLine 이 여기 걸려 있어 개행이 든 설명도
+// 주석 밖으로 새지 않는다.
+func (f RealtimeField) Comment() string {
+	return comment(Node{Field: Field{
+		Korean:      f.Korean,
+		Required:    f.Required,
+		Length:      f.Length,
+		Description: f.Desc,
+	}})
 }
 
 // RealtimeTarget 은 실시간 한 종류(파일 하나)다.
@@ -64,7 +85,7 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type {{.ValueType}} struct {
-{{range .Fields}}	// {{.Korean}}
+{{range .Fields}}	// {{.Comment}}
 	{{.Name}} string ` + "`json:\"{{.FID}}\"`" + `
 {{end}}}
 

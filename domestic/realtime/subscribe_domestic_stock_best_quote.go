@@ -14,9 +14,9 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticStockBestQuote struct {
-	// (최우선)매도호가
+	// (최우선)매도호가 (단위: 원, 부호가 포함된 숫자)
 	BestAskPrice string `json:"27"`
-	// (최우선)매수호가
+	// (최우선)매수호가 (단위: 원, 부호가 포함된 숫자)
 	BestBidPrice string `json:"28"`
 }
 

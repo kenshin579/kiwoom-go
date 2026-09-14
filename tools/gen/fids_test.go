@@ -16,6 +16,10 @@ const fidSpecDir = "../spec"
 //
 // groups.go 의 카테고리 완전성 테스트와 같은 성격이다 — 빠진 것이 조용히 넘어가면
 // 생성물에서 필드 하나가 통째로 사라진다.
+//
+// **depth 를 보지 않는다.** 실시간 값은 depth 2 에 있지만 조건검색 결과 행은 depth 1 이다.
+// 예전에 depth == 2 로 걸렀더니 조건검색 쪽 FID 가 검사 밖에 있었고, 표에 없는 318(소업종)이
+// 통과했다. 숫자 element 면 어느 깊이든 표를 거쳐야 한다 — 생성기가 그렇게 만든다.
 func TestFids_스펙의_모든_FID_가_표에_있다(t *testing.T) {
 	spec, err := gen.LoadSpec(filepath.Join(fidSpecDir, "kiwoom_api_spec.json"))
 	if err != nil {
@@ -29,7 +33,7 @@ func TestFids_스펙의_모든_FID_가_표에_있다(t *testing.T) {
 			continue
 		}
 		for _, f := range api.Response.Body {
-			if f.Depth == 2 && isDigits(f.Element) {
+			if isDigits(f.Element) {
 				want[f.Element] = f.Korean
 			}
 		}
@@ -90,15 +94,17 @@ func isDigits(s string) bool {
 	return true
 }
 
-// TestConditionTrnm_스펙에서_뽑은_값이_설계표와_같다 는 조건검색 8건의 trnm 을 전부 대조한다.
+// TestConditionTrnm_조건검색_메뉴의_모든_API_가_설계표와_같다 는 조건검색 API 의 trnm 을 전부 대조한다.
 //
 // 표는 설계 §2 에서 온다. 여기 적어 두는 이유: trnm 을 틀리게 뽑으면 **생성 시점에는
 // 조용히 지나가고** 실서버에서 *kiwoom.WSAPIError 로만 드러난다. 생성물을 훑어봐도
 // 대문자 일곱 글자라 눈에 안 띈다.
 //
-// 스펙 파일에서 찾아 대조하므로 스펙이 바뀌어도 여기서 잡힌다 — 8건이 다 나오지 않으면
-// 그것도 실패다(조건검색 API 가 스펙에서 사라지거나 메뉴가 바뀐 경우).
-func TestConditionTrnm_스펙에서_뽑은_값이_설계표와_같다(t *testing.T) {
+// **방향은 스펙 → 표다.** 조건검색 메뉴에 있는 API 는 하나도 빠짐없이 기대 표에 있어야
+// 한다. 반대로 걸면(표에 있는 것만 훑으면) 키움이 조건검색 API 를 **추가했을 때** 검증되지
+// 않은 trnm 으로 생성되고 아무도 모른다 — groups.go 의 카테고리 완전성 테스트와 같은
+// 방향이다. 표에 있는데 스펙에서 사라진 것도 함께 잡는다.
+func TestConditionTrnm_조건검색_메뉴의_모든_API_가_설계표와_같다(t *testing.T) {
 	want := map[string]string{
 		"ka10171":  "CNSRLST",
 		"ka10172":  "CNSRREQ",
@@ -117,12 +123,20 @@ func TestConditionTrnm_스펙에서_뽑은_값이_설계표와_같다(t *testing
 
 	seen := map[string]bool{}
 	for _, api := range spec.APIs {
-		id := api.Meta["API ID"]
-		exp, ok := want[id]
-		if !ok {
+		menu := api.Meta["메뉴 위치"]
+		// 생성기와 같은 잣대로 고른다 — 메뉴 문자열을 따로 짚으면 둘이 어긋날 수 있다.
+		g, ok := gen.Lookup(menu)
+		if !ok || g.Template() != gen.KindCondition {
 			continue
 		}
+		id := api.Meta["API ID"]
 		seen[id] = true
+
+		exp, known := want[id]
+		if !known {
+			t.Errorf("설계 §2 의 표에 없는 조건검색 API: %s (%s) — trnm 이 검증되지 않은 채 생성된다", id, menu)
+			continue
+		}
 		got, err := gen.ConditionTrnm(api)
 		if err != nil {
 			t.Errorf("%s: ConditionTrnm: %v", id, err)
@@ -141,7 +155,7 @@ func TestConditionTrnm_스펙에서_뽑은_값이_설계표와_같다(t *testing
 	}
 	sort.Strings(absent)
 	if len(absent) > 0 {
-		t.Errorf("스펙에서 찾지 못한 조건검색 API %v — 대조가 비어 있었다", absent)
+		t.Errorf("스펙의 조건검색 메뉴에서 찾지 못한 API %v — 대조가 비어 있었다", absent)
 	}
 }
 

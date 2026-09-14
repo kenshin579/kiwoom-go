@@ -97,6 +97,21 @@ var skipped = map[string]bool{
 	"OAuth 인증 > 접근토큰폐기": true,
 }
 
+// handWritten 은 생성하지 않고 손으로 쓰는 API 다. 둘을 빼는 이유가 서로 다르다.
+//
+// ka10173 은 응답이 두 벌이다(조회 결과 + REAL 푸시). 스펙에서도 이것만 is_section 으로
+// 본문이 갈라져 BuildTree 가 에러를 낸다. 337개 중 하나를 위해 생성기에 분기를 넣는 것보다,
+// 하나를 손으로 쓰고 생성기를 단순하게 두는 편이 낫다.
+//
+// usa20290 은 다르다 — BuildTree 는 통과한다. 조회 응답 한 벌뿐이고 is_section 도 없다.
+// 빼는 이유는 푸시가 실제로 오는데 그 FID 표가 스펙에 통째로 비어 있어서다
+// (공식 예제도 COLUMNS = {} 로 둔다. SOURCE.md 의 WebSocket 규약 절 참고).
+// 조회는 타입을 붙이고 푸시는 Raw 맵으로만 내야 하므로 역시 손으로 쓴다.
+var handWritten = map[string]bool{
+	"ka10173":  true,
+	"usa20290": true,
+}
+
 // menuKey 는 "국내주식 > 시세 > 주식호가요청(ka10004)" 에서 앞 두 단계만 뗀다.
 func menuKey(menu string) string {
 	parts := strings.SplitN(menu, " > ", 3)
@@ -119,3 +134,8 @@ func Lookup(menu string) (Group, bool) {
 
 // Skipped 는 일부러 생성하지 않는 카테고리인지 알려준다.
 func Skipped(menu string) bool { return skipped[menuKey(menu)] }
+
+// HandWritten 은 생성 대상에서 빼고 손으로 쓰는 API 인지 알려준다.
+//
+// **BuildTree 보다 먼저 물어야 한다** — ka10173 은 트리를 접다가 에러를 내기 때문이다.
+func HandWritten(apiID string) bool { return handWritten[apiID] }

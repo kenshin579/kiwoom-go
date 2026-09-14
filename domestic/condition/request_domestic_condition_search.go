@@ -5,9 +5,10 @@ package condition
 import "context"
 
 // RequestDomesticConditionSearchRequest 는 조건검색 요청 일반(ka10172) 요청이다.
+//
+// trnm 은 여기 없다. 값이 CNSRREQ 하나로 정해져 있어 호출자가 고를 것이 없고, 비워 두면
+// 서버 응답이 짝을 찾지 못해 ctx 만료까지 조용히 매달린다 — 전송 직전에 아래 메서드가 넣는다.
 type RequestDomesticConditionSearchRequest struct {
-	// 서비스명 (필수, 7자, CNSRREQ 고정값)
-	Trnm string `json:"trnm"`
 	// 조건검색식 일련번호 (필수, 3자)
 	Seq string `json:"seq"`
 	// 조회타입 (필수, 0:조건검색)
@@ -41,25 +42,25 @@ type RequestDomesticConditionSearchResponse struct {
 // RequestDomesticConditionSearchDataItem 는 Data 의 원소다.
 type RequestDomesticConditionSearchDataItem struct {
 	// 종목코드 (접두어 1자리 + 종목코드 6자리, 접두어(A: 주식 / J: ELW / Q: ETN))
-	N9001 string `json:"9001"`
+	StockOrSectorCode string `json:"9001"`
 	// 종목명
-	N302 string `json:"302"`
+	StockName string `json:"302"`
 	// 현재가 (단위: 원, 좌측 0-padding 처리된 부호 포함 9자리 숫자)
-	N10 string `json:"10"`
+	CurrentPrice string `json:"10"`
 	// 전일대비기호 (1: 상한가, 2:상승, 3:보합, 4:하한가, 5:하락)
-	N25 string `json:"25"`
+	PrevDayDiffSign string `json:"25"`
 	// 전일대비 (단위: 원, 좌측 0-padding 처리된 부호 포함 9자리 숫자)
-	N11 string `json:"11"`
+	PrevDayDiff string `json:"11"`
 	// 등락율 (단위: 원, 좌측 0-padding 처리된 부호 포함 9자리 숫자 ※ '000001500' 값은 +1.50%, '-00001500' 값은 -1.50%를 의미합니다.)
-	N12 string `json:"12"`
+	ChangeRate string `json:"12"`
 	// 누적거래량 (단위: 1주, 좌측 0-padding 처리된 부호 포함 9자리 숫자)
-	N13 string `json:"13"`
+	CumulativeVolume string `json:"13"`
 	// 시가 (단위: 원, 좌측 0-padding 처리된 부호 포함 9자리 숫자)
-	N16 string `json:"16"`
+	OpenPrice string `json:"16"`
 	// 고가 (단위: 원, 좌측 0-padding 처리된 부호 포함 9자리 숫자)
-	N17 string `json:"17"`
+	HighPrice string `json:"17"`
 	// 저가 (단위: 원, 좌측 0-padding 처리된 부호 포함 9자리 숫자)
-	N18 string `json:"18"`
+	LowPrice string `json:"18"`
 }
 
 // RequestDomesticConditionSearch 는 조건검색 요청 일반(ka10172) 이다. WebSocket 위의 요청/응답이다.
@@ -67,8 +68,15 @@ type RequestDomesticConditionSearchDataItem struct {
 // 메뉴: 국내주식 > 조건검색 > 조건검색 요청 일반(ka10172)
 // URL:  /api/dostk/websocket  (trnm: CNSRREQ)
 func (c *Client) RequestDomesticConditionSearch(ctx context.Context, req RequestDomesticConditionSearchRequest) (*RequestDomesticConditionSearchResponse, error) {
+	// 익명 래퍼로 trnm 을 끼운다. 임베드한 필드는 encoding/json 이 바깥으로 끌어올리므로
+	// 나가는 본문은 {"trnm":"CNSRREQ", ...req} 가 된다.
+	body := struct {
+		Trnm string `json:"trnm"`
+		RequestDomesticConditionSearchRequest
+	}{Trnm: "CNSRREQ", RequestDomesticConditionSearchRequest: req}
+
 	var out RequestDomesticConditionSearchResponse
-	if err := c.ws.Request(ctx, "CNSRREQ", req, &out); err != nil {
+	if err := c.ws.Request(ctx, "CNSRREQ", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

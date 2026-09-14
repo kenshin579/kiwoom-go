@@ -5,9 +5,10 @@ package condition
 import "context"
 
 // StopDomesticRealtimeConditionSearchRequest 는 조건검색 실시간 해제(ka10174) 요청이다.
+//
+// trnm 은 여기 없다. 값이 CNSRCLR 하나로 정해져 있어 호출자가 고를 것이 없고, 비워 두면
+// 서버 응답이 짝을 찾지 못해 ctx 만료까지 조용히 매달린다 — 전송 직전에 아래 메서드가 넣는다.
 type StopDomesticRealtimeConditionSearchRequest struct {
-	// 서비스명 (필수, 7자, CNSRCLR 고정값)
-	Trnm string `json:"trnm"`
 	// 조건검색식 일련번호 (필수)
 	Seq string `json:"seq"`
 }
@@ -29,8 +30,15 @@ type StopDomesticRealtimeConditionSearchResponse struct {
 // 메뉴: 국내주식 > 조건검색 > 조건검색 실시간 해제(ka10174)
 // URL:  /api/dostk/websocket  (trnm: CNSRCLR)
 func (c *Client) StopDomesticRealtimeConditionSearch(ctx context.Context, req StopDomesticRealtimeConditionSearchRequest) (*StopDomesticRealtimeConditionSearchResponse, error) {
+	// 익명 래퍼로 trnm 을 끼운다. 임베드한 필드는 encoding/json 이 바깥으로 끌어올리므로
+	// 나가는 본문은 {"trnm":"CNSRCLR", ...req} 가 된다.
+	body := struct {
+		Trnm string `json:"trnm"`
+		StopDomesticRealtimeConditionSearchRequest
+	}{Trnm: "CNSRCLR", StopDomesticRealtimeConditionSearchRequest: req}
+
 	var out StopDomesticRealtimeConditionSearchResponse
-	if err := c.ws.Request(ctx, "CNSRCLR", req, &out); err != nil {
+	if err := c.ws.Request(ctx, "CNSRCLR", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

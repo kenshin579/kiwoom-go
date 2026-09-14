@@ -20,9 +20,9 @@ type OverseasOrderConfirmation struct {
 	OrderNumber string `json:"9203"`
 	// 종목,업종코드
 	StockOrSectorCode string `json:"9001"`
-	// 주문구분
+	// 주문구분 (10:원주문, 11:정정주문, 12:취소주문)
 	OrderType string `json:"905"`
-	// 매도수구분
+	// 매도수구분 (01:매도, 02:매수)
 	TradeSide string `json:"907"`
 	// 원주문번호
 	OriginalOrderNumber string `json:"904"`

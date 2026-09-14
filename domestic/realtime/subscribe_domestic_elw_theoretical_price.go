@@ -14,9 +14,9 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticElwTheoreticalPrice struct {
-	// 체결시간
+	// 체결시간 (HHmmss)
 	TradeTime string `json:"20"`
-	// 현재가
+	// 현재가 (단위: 원, 부호가 포함된 숫자)
 	CurrentPrice string `json:"10"`
 	// ELW이론가
 	ELWTheoreticalPrice string `json:"670"`

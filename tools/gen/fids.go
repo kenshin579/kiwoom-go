@@ -237,7 +237,11 @@ var Fids = []Fid{
 	{"306", "LowerLimitPrice", "하한가"},
 	{"307", "BasePrice", "기준가"},
 	{"311", "MarketCapHundredMillionWon", "시가총액(억)"}, // 억원 단위다 — 10^8 원. Billion(10^9) 이 아니다
-	{"337", "ExchangeType", "거래소구분"},                 // 거래원(0F)의 거래소구분. FID 2134·9081 과 한글명이 같아 이름을 갈랐다
+	// 미국 조건검색 결과행(usa20281)에만 나온다. 스펙의 description 열이 비어 있어 단위·코드
+	// 도메인을 알 수 없다 — 값이 코드인지 이름인지도 적혀 있지 않다. 같은 API 의 9001(종목,업종코드)이
+	// 업종을 Sector 로 옮기므로 소/중/대 업종 중 "소" 만 Sub 로 붙인다.
+	{"318", "SubSector", "소업종"},
+	{"337", "ExchangeType", "거래소구분"}, // 거래원(0F)의 거래소구분. FID 2134·9081 과 한글명이 같아 이름을 갈랐다
 	{"370", "StockInfo", "종목정보"},
 	{"382", "MarginRateDisplay", "증거금율표시"},
 	{"567", "UpperLimitTime", "상한가발생시간"},
@@ -463,26 +467,6 @@ func LookupFid(fid string) (Fid, bool) {
 	return f, ok
 }
 
-// handWritten 은 생성하지 않고 손으로 쓰는 API 다. 둘을 빼는 이유가 서로 다르다.
-//
-// ka10173 은 응답이 두 벌이다(조회 결과 + REAL 푸시). 스펙에서도 이것만 is_section 으로
-// 본문이 갈라져 BuildTree 가 에러를 낸다. 337개 중 하나를 위해 생성기에 분기를 넣는 것보다,
-// 하나를 손으로 쓰고 생성기를 단순하게 두는 편이 낫다.
-//
-// usa20290 은 다르다 — BuildTree 는 통과한다. 조회 응답 한 벌뿐이고 is_section 도 없다.
-// 빼는 이유는 푸시가 실제로 오는데 그 FID 표가 스펙에 통째로 비어 있어서다
-// (공식 예제도 COLUMNS = {} 로 둔다. SOURCE.md 의 WebSocket 규약 절 참고).
-// 조회는 타입을 붙이고 푸시는 Raw 맵으로만 내야 하므로 역시 손으로 쓴다.
-var handWritten = map[string]bool{
-	"ka10173":  true,
-	"usa20290": true,
-}
-
-// HandWritten 은 생성 대상에서 빼고 손으로 쓰는 API 인지 알려준다.
-//
-// **BuildTree 보다 먼저 물어야 한다** — ka10173 은 트리를 접다가 에러를 내기 때문이다.
-func HandWritten(apiID string) bool { return handWritten[apiID] }
-
 // RealtimeFields 는 실시간 응답의 depth-2 FID 필드를 표와 맞춰 돌려준다.
 //
 // BuildTree 를 거치지 않는다 — 실시간 응답의 values 는 맵이라 LIST 트리로 접을 수 없다
@@ -500,7 +484,14 @@ func RealtimeFields(api API) ([]RealtimeField, error) {
 			return nil, fmt.Errorf(
 				"표에 없는 FID: %q(%s). tools/gen/fids.go 에 넣어라", f.Element, f.Korean)
 		}
-		out = append(out, RealtimeField{FID: fid.FID, Name: fid.Name, Korean: f.Korean})
+		out = append(out, RealtimeField{
+			FID:      fid.FID,
+			Name:     fid.Name,
+			Korean:   f.Korean,
+			Required: f.Required,
+			Length:   f.Length,
+			Desc:     f.Description,
+		})
 	}
 	return out, nil
 }

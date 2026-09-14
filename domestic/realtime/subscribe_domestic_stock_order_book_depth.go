@@ -14,147 +14,147 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticStockOrderBookDepth struct {
-	// 호가시간
+	// 호가시간 (HHmmss)
 	QuoteTime string `json:"21"`
-	// 매도호가1
+	// 매도호가1 (단위: 원, 부호가 포함된 숫자)
 	AskPrice1 string `json:"41"`
-	// 매도호가수량1
+	// 매도호가수량1 (단위: 1주)
 	AskQuantity1 string `json:"61"`
 	// 매도호가직전대비1
 	AskPrevDiff1 string `json:"81"`
-	// 매수호가1
+	// 매수호가1 (단위: 원, 부호가 포함된 숫자)
 	BidPrice1 string `json:"51"`
-	// 매수호가수량1
+	// 매수호가수량1 (단위: 1주)
 	BidQuantity1 string `json:"71"`
 	// 매수호가직전대비1
 	BidPrevDiff1 string `json:"91"`
-	// 매도호가2
+	// 매도호가2 (단위: 원, 부호가 포함된 숫자)
 	AskPrice2 string `json:"42"`
-	// 매도호가수량2
+	// 매도호가수량2 (단위: 1주)
 	AskQuantity2 string `json:"62"`
 	// 매도호가직전대비2
 	AskPrevDiff2 string `json:"82"`
-	// 매수호가2
+	// 매수호가2 (단위: 원, 부호가 포함된 숫자)
 	BidPrice2 string `json:"52"`
-	// 매수호가수량2
+	// 매수호가수량2 (단위: 1주)
 	BidQuantity2 string `json:"72"`
 	// 매수호가직전대비2
 	BidPrevDiff2 string `json:"92"`
-	// 매도호가3
+	// 매도호가3 (단위: 원, 부호가 포함된 숫자)
 	AskPrice3 string `json:"43"`
-	// 매도호가수량3
+	// 매도호가수량3 (단위: 1주)
 	AskQuantity3 string `json:"63"`
 	// 매도호가직전대비3
 	AskPrevDiff3 string `json:"83"`
-	// 매수호가3
+	// 매수호가3 (단위: 원, 부호가 포함된 숫자)
 	BidPrice3 string `json:"53"`
-	// 매수호가수량3
+	// 매수호가수량3 (단위: 1주)
 	BidQuantity3 string `json:"73"`
 	// 매수호가직전대비3
 	BidPrevDiff3 string `json:"93"`
-	// 매도호가4
+	// 매도호가4 (단위: 원, 부호가 포함된 숫자)
 	AskPrice4 string `json:"44"`
-	// 매도호가수량4
+	// 매도호가수량4 (단위: 1주)
 	AskQuantity4 string `json:"64"`
 	// 매도호가직전대비4
 	AskPrevDiff4 string `json:"84"`
-	// 매수호가4
+	// 매수호가4 (단위: 원, 부호가 포함된 숫자)
 	BidPrice4 string `json:"54"`
-	// 매수호가수량4
+	// 매수호가수량4 (단위: 1주)
 	BidQuantity4 string `json:"74"`
 	// 매수호가직전대비4
 	BidPrevDiff4 string `json:"94"`
-	// 매도호가5
+	// 매도호가5 (단위: 원, 부호가 포함된 숫자)
 	AskPrice5 string `json:"45"`
-	// 매도호가수량5
+	// 매도호가수량5 (단위: 1주)
 	AskQuantity5 string `json:"65"`
 	// 매도호가직전대비5
 	AskPrevDiff5 string `json:"85"`
-	// 매수호가5
+	// 매수호가5 (단위: 원, 부호가 포함된 숫자)
 	BidPrice5 string `json:"55"`
-	// 매수호가수량5
+	// 매수호가수량5 (단위: 1주)
 	BidQuantity5 string `json:"75"`
 	// 매수호가직전대비5
 	BidPrevDiff5 string `json:"95"`
-	// 매도호가6
+	// 매도호가6 (단위: 원, 부호가 포함된 숫자)
 	AskPrice6 string `json:"46"`
-	// 매도호가수량6
+	// 매도호가수량6 (단위: 1주)
 	AskQuantity6 string `json:"66"`
 	// 매도호가직전대비6
 	AskPrevDiff6 string `json:"86"`
-	// 매수호가6
+	// 매수호가6 (단위: 원, 부호가 포함된 숫자)
 	BidPrice6 string `json:"56"`
-	// 매수호가수량6
+	// 매수호가수량6 (단위: 1주)
 	BidQuantity6 string `json:"76"`
 	// 매수호가직전대비6
 	BidPrevDiff6 string `json:"96"`
-	// 매도호가7
+	// 매도호가7 (단위: 원, 부호가 포함된 숫자)
 	AskPrice7 string `json:"47"`
-	// 매도호가수량7
+	// 매도호가수량7 (단위: 1주)
 	AskQuantity7 string `json:"67"`
 	// 매도호가직전대비7
 	AskPrevDiff7 string `json:"87"`
-	// 매수호가7
+	// 매수호가7 (단위: 원, 부호가 포함된 숫자)
 	BidPrice7 string `json:"57"`
-	// 매수호가수량7
+	// 매수호가수량7 (단위: 1주)
 	BidQuantity7 string `json:"77"`
 	// 매수호가직전대비7
 	BidPrevDiff7 string `json:"97"`
-	// 매도호가8
+	// 매도호가8 (단위: 원, 부호가 포함된 숫자)
 	AskPrice8 string `json:"48"`
-	// 매도호가수량8
+	// 매도호가수량8 (단위: 1주)
 	AskQuantity8 string `json:"68"`
 	// 매도호가직전대비8
 	AskPrevDiff8 string `json:"88"`
-	// 매수호가8
+	// 매수호가8 (단위: 원, 부호가 포함된 숫자)
 	BidPrice8 string `json:"58"`
-	// 매수호가수량8
+	// 매수호가수량8 (단위: 1주)
 	BidQuantity8 string `json:"78"`
 	// 매수호가직전대비8
 	BidPrevDiff8 string `json:"98"`
-	// 매도호가9
+	// 매도호가9 (단위: 원, 부호가 포함된 숫자)
 	AskPrice9 string `json:"49"`
-	// 매도호가수량9
+	// 매도호가수량9 (단위: 1주)
 	AskQuantity9 string `json:"69"`
 	// 매도호가직전대비9
 	AskPrevDiff9 string `json:"89"`
-	// 매수호가9
+	// 매수호가9 (단위: 원, 부호가 포함된 숫자)
 	BidPrice9 string `json:"59"`
-	// 매수호가수량9
+	// 매수호가수량9 (단위: 1주)
 	BidQuantity9 string `json:"79"`
 	// 매수호가직전대비9
 	BidPrevDiff9 string `json:"99"`
-	// 매도호가10
+	// 매도호가10 (단위: 원, 부호가 포함된 숫자)
 	AskPrice10 string `json:"50"`
-	// 매도호가수량10
+	// 매도호가수량10 (단위: 1주)
 	AskQuantity10 string `json:"70"`
 	// 매도호가직전대비10
 	AskPrevDiff10 string `json:"90"`
-	// 매수호가10
+	// 매수호가10 (단위: 원, 부호가 포함된 숫자)
 	BidPrice10 string `json:"60"`
-	// 매수호가수량10
+	// 매수호가수량10 (단위: 1주)
 	BidQuantity10 string `json:"80"`
 	// 매수호가직전대비10
 	BidPrevDiff10 string `json:"100"`
-	// 매도호가총잔량
+	// 매도호가총잔량 (단위: 1주)
 	TotalAskQuantity string `json:"121"`
 	// 매도호가총잔량직전대비
 	TotalAskQuantityPrevDiff string `json:"122"`
-	// 매수호가총잔량
+	// 매수호가총잔량 (단위: 1주)
 	TotalBidQuantity string `json:"125"`
 	// 매수호가총잔량직전대비
 	TotalBidQuantityPrevDiff string `json:"126"`
-	// 예상체결가
+	// 예상체결가 (단위: 원)
 	ExpectedPrice string `json:"23"`
-	// 예상체결수량
+	// 예상체결수량 (단위: 1주)
 	ExpectedQuantity string `json:"24"`
-	// 순매수잔량
+	// 순매수잔량 (단위: 1주, 부호가 포함된 숫자)
 	NetBidQuantity string `json:"128"`
-	// 매수비율
+	// 매수비율 (단위: %, 소수점 둘째 자리까지 포맷된 백분율)
 	BidRatio string `json:"129"`
-	// 순매도잔량
+	// 순매도잔량 (단위: 1주, 부호가 포함된 숫자)
 	NetAskQuantity string `json:"138"`
-	// 매도비율
+	// 매도비율 (단위: %, 소수점 둘째 자리까지 포맷된 백분율)
 	AskRatio string `json:"139"`
 	// 예상체결가전일종가대비
 	ExpectedPricePrevCloseDiff string `json:"200"`
@@ -162,7 +162,7 @@ type DomesticStockOrderBookDepth struct {
 	ExpectedPricePrevCloseChangeRate string `json:"201"`
 	// 예상체결가전일종가대비기호
 	ExpectedPricePrevCloseDiffSign string `json:"238"`
-	// 예상체결가
+	// 예상체결가 (예상체결 시간동안에만 유효한 값)
 	ExpectedTradePrice string `json:"291"`
 	// 예상체결량
 	ExpectedTradeVolume string `json:"292"`
@@ -328,17 +328,17 @@ type DomesticStockOrderBookDepth struct {
 	NXTMidPriceTotalBidQuantity string `json:"6108"`
 	// NXT중간가 매수 총잔량 증감
 	NXTMidPriceTotalBidQuantityChange string `json:"6109"`
-	// KRX중간가대비
+	// KRX중간가대비 (기준가대비)
 	KRXMidPriceDiff string `json:"6110"`
-	// KRX중간가대비 기호
+	// KRX중간가대비 기호 (기준가대비)
 	KRXMidPriceDiffSign string `json:"6111"`
-	// KRX중간가대비등락율
+	// KRX중간가대비등락율 (기준가대비)
 	KRXMidPriceChangeRate string `json:"6112"`
-	// NXT중간가대비
+	// NXT중간가대비 (기준가대비)
 	NXTMidPriceDiff string `json:"6113"`
-	// NXT중간가대비 기호
+	// NXT중간가대비 기호 (기준가대비)
 	NXTMidPriceDiffSign string `json:"6114"`
-	// NXT중간가대비등락율
+	// NXT중간가대비등락율 (기준가대비)
 	NXTMidPriceChangeRate string `json:"6115"`
 }
 

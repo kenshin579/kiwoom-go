@@ -16,9 +16,9 @@ import (
 type DomesticStockTodayBrokers struct {
 	// 매도거래원1
 	SellMember1 string `json:"141"`
-	// 매도거래원수량1
+	// 매도거래원수량1 (단위: 1주)
 	SellMemberQuantity1 string `json:"161"`
-	// 매도거래원별증감1
+	// 매도거래원별증감1 (단위: 1주, 부호가 포함된 숫자)
 	SellMemberChange1 string `json:"166"`
 	// 매도거래원코드1
 	SellMemberCode1 string `json:"146"`
@@ -26,9 +26,9 @@ type DomesticStockTodayBrokers struct {
 	SellMemberColor1 string `json:"271"`
 	// 매수거래원1
 	BuyMember1 string `json:"151"`
-	// 매수거래원수량1
+	// 매수거래원수량1 (단위: 1주)
 	BuyMemberQuantity1 string `json:"171"`
-	// 매수거래원별증감1
+	// 매수거래원별증감1 (단위: 1주, 부호가 포함된 숫자)
 	BuyMemberChange1 string `json:"176"`
 	// 매수거래원코드1
 	BuyMemberCode1 string `json:"156"`
@@ -36,9 +36,9 @@ type DomesticStockTodayBrokers struct {
 	BuyMemberColor1 string `json:"281"`
 	// 매도거래원2
 	SellMember2 string `json:"142"`
-	// 매도거래원수량2
+	// 매도거래원수량2 (단위: 1주)
 	SellMemberQuantity2 string `json:"162"`
-	// 매도거래원별증감2
+	// 매도거래원별증감2 (단위: 1주, 부호가 포함된 숫자)
 	SellMemberChange2 string `json:"167"`
 	// 매도거래원코드2
 	SellMemberCode2 string `json:"147"`
@@ -46,9 +46,9 @@ type DomesticStockTodayBrokers struct {
 	SellMemberColor2 string `json:"272"`
 	// 매수거래원2
 	BuyMember2 string `json:"152"`
-	// 매수거래원수량2
+	// 매수거래원수량2 (단위: 1주)
 	BuyMemberQuantity2 string `json:"172"`
-	// 매수거래원별증감2
+	// 매수거래원별증감2 (단위: 1주, 부호가 포함된 숫자)
 	BuyMemberChange2 string `json:"177"`
 	// 매수거래원코드2
 	BuyMemberCode2 string `json:"157"`
@@ -56,9 +56,9 @@ type DomesticStockTodayBrokers struct {
 	BuyMemberColor2 string `json:"282"`
 	// 매도거래원3
 	SellMember3 string `json:"143"`
-	// 매도거래원수량3
+	// 매도거래원수량3 (단위: 1주)
 	SellMemberQuantity3 string `json:"163"`
-	// 매도거래원별증감3
+	// 매도거래원별증감3 (단위: 1주, 부호가 포함된 숫자)
 	SellMemberChange3 string `json:"168"`
 	// 매도거래원코드3
 	SellMemberCode3 string `json:"148"`
@@ -66,9 +66,9 @@ type DomesticStockTodayBrokers struct {
 	SellMemberColor3 string `json:"273"`
 	// 매수거래원3
 	BuyMember3 string `json:"153"`
-	// 매수거래원수량3
+	// 매수거래원수량3 (단위: 1주)
 	BuyMemberQuantity3 string `json:"173"`
-	// 매수거래원별증감3
+	// 매수거래원별증감3 (단위: 1주, 부호가 포함된 숫자)
 	BuyMemberChange3 string `json:"178"`
 	// 매수거래원코드3
 	BuyMemberCode3 string `json:"158"`
@@ -76,9 +76,9 @@ type DomesticStockTodayBrokers struct {
 	BuyMemberColor3 string `json:"283"`
 	// 매도거래원4
 	SellMember4 string `json:"144"`
-	// 매도거래원수량4
+	// 매도거래원수량4 (단위: 1주)
 	SellMemberQuantity4 string `json:"164"`
-	// 매도거래원별증감4
+	// 매도거래원별증감4 (단위: 1주, 부호가 포함된 숫자)
 	SellMemberChange4 string `json:"169"`
 	// 매도거래원코드4
 	SellMemberCode4 string `json:"149"`
@@ -86,9 +86,9 @@ type DomesticStockTodayBrokers struct {
 	SellMemberColor4 string `json:"274"`
 	// 매수거래원4
 	BuyMember4 string `json:"154"`
-	// 매수거래원수량4
+	// 매수거래원수량4 (단위: 1주)
 	BuyMemberQuantity4 string `json:"174"`
-	// 매수거래원별증감4
+	// 매수거래원별증감4 (단위: 1주, 부호가 포함된 숫자)
 	BuyMemberChange4 string `json:"179"`
 	// 매수거래원코드4
 	BuyMemberCode4 string `json:"159"`
@@ -96,9 +96,9 @@ type DomesticStockTodayBrokers struct {
 	BuyMemberColor4 string `json:"284"`
 	// 매도거래원5
 	SellMember5 string `json:"145"`
-	// 매도거래원수량5
+	// 매도거래원수량5 (단위: 1주)
 	SellMemberQuantity5 string `json:"165"`
-	// 매도거래원별증감5
+	// 매도거래원별증감5 (단위: 1주, 부호가 포함된 숫자)
 	SellMemberChange5 string `json:"170"`
 	// 매도거래원코드5
 	SellMemberCode5 string `json:"150"`
@@ -106,9 +106,9 @@ type DomesticStockTodayBrokers struct {
 	SellMemberColor5 string `json:"275"`
 	// 매수거래원5
 	BuyMember5 string `json:"155"`
-	// 매수거래원수량5
+	// 매수거래원수량5 (단위: 1주)
 	BuyMemberQuantity5 string `json:"175"`
-	// 매수거래원별증감5
+	// 매수거래원별증감5 (단위: 1주, 부호가 포함된 숫자)
 	BuyMemberChange5 string `json:"180"`
 	// 매수거래원코드5
 	BuyMemberCode5 string `json:"160"`

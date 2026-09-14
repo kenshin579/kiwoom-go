@@ -14,7 +14,7 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticElwIndicator struct {
-	// 체결시간
+	// 체결시간 (HHmmss)
 	TradeTime string `json:"20"`
 	// ELW패리티
 	ELWParity string `json:"666"`

@@ -26,13 +26,13 @@ type OverseasOrderFill struct {
 	OriginalOrderNumber string `json:"904"`
 	// 주문번호
 	OrderNumber string `json:"9203"`
-	// 주문구분
+	// 주문구분 (10:원주문, 11:정정주문, 12:취소주문)
 	OrderType string `json:"905"`
-	// 매도수구분
+	// 매도수구분 (01:매도, 02:매수)
 	TradeSide string `json:"907"`
 	// 주문/체결시간
 	OrderExecutionTime string `json:"908"`
-	// 주문상태
+	// 주문상태 (텍스트값(주문전송, 무효주문, 부분체결, 체결완료 등...))
 	OrderStatus string `json:"913"`
 	// 주문수량
 	OrderQuantity string `json:"900"`
@@ -72,7 +72,7 @@ type OverseasOrderFill struct {
 	Fee string `json:"13006"`
 	// 매도수구분명
 	TradeSideName string `json:"50072"`
-	// 매매구분명
+	// 매매구분명 (텍스트값(지정가, 시장가 등...))
 	OrderPriceTypeName string `json:"50073"`
 	// 실현손익매입금 사용
 	RealizedProfitPurchaseAmount string `json:"50724"`

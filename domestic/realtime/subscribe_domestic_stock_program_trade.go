@@ -14,29 +14,29 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticStockProgramTrade struct {
-	// 체결시간
+	// 체결시간 (HHmmss)
 	TradeTime string `json:"20"`
-	// 현재가
+	// 현재가 (단위: 원, 부호가 포함된 숫자)
 	CurrentPrice string `json:"10"`
-	// 전일대비기호
+	// 전일대비기호 (1: 상한가, 2:상승, 3:보합, 4:하한가, 5:하락)
 	PrevDayDiffSign string `json:"25"`
-	// 전일대비
+	// 전일대비 (단위: 원, 부호가 포함된 숫자)
 	PrevDayDiff string `json:"11"`
-	// 등락율
+	// 등락율 (단위: %, 부호 포함 소수점 둘째 자리까지 포맷된 백분율)
 	ChangeRate string `json:"12"`
-	// 누적거래량
+	// 누적거래량 (단위: 1주)
 	CumulativeVolume string `json:"13"`
-	// 매도수량
+	// 매도수량 (단위: 1주)
 	SellQuantity string `json:"202"`
-	// 매도금액
+	// 매도금액 (단위: 원)
 	SellAmount string `json:"204"`
-	// 매수수량
+	// 매수수량 (단위: 1주)
 	BuyQuantity string `json:"206"`
 	// 매수금액
 	BuyAmount string `json:"208"`
 	// 순매수수량
 	NetBuyQuantity string `json:"210"`
-	// 순매수수량증감
+	// 순매수수량증감 (계약,주)
 	NetBuyQuantityChange string `json:"211"`
 	// 순매수금액
 	NetBuyAmount string `json:"212"`

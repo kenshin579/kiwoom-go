@@ -14,15 +14,15 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticStockAfterHoursQuote struct {
-	// 호가시간
+	// 호가시간 (HHmmss)
 	QuoteTime string `json:"21"`
-	// 시간외매도호가총잔량
+	// 시간외매도호가총잔량 (단위: 1주)
 	AfterHoursTotalAskQuantity string `json:"131"`
-	// 시간외매도호가총잔량직전대비
+	// 시간외매도호가총잔량직전대비 (단위: 1주, 부호가 포함된 숫자)
 	AfterHoursTotalAskQuantityPrevDiff string `json:"132"`
-	// 시간외매수호가총잔량
+	// 시간외매수호가총잔량 (단위: 1주)
 	AfterHoursTotalBidQuantity string `json:"135"`
-	// 시간외매수호가총잔량직전대비
+	// 시간외매수호가총잔량직전대비 (단위: 1주, 부호가 포함된 숫자)
 	AfterHoursTotalBidQuantityPrevDiff string `json:"136"`
 }
 

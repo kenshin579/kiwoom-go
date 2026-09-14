@@ -14,9 +14,9 @@ import (
 //
 // 필드 이름은 tools/gen/fids.go 의 표에서 온다 — 스펙은 FID 숫자와 한글명만 준다.
 type DomesticOrderFill struct {
-	// 계좌번호
+	// 계좌번호 (고유 계좌번호 10자리)
 	AccountNumber string `json:"9201"`
-	// 주문번호
+	// 주문번호 (주문번호 7자리)
 	OrderNumber string `json:"9203"`
 	// 관리자사번
 	ManagerEmployeeNumber string `json:"9205"`
@@ -24,27 +24,27 @@ type DomesticOrderFill struct {
 	StockOrSectorCode string `json:"9001"`
 	// 주문업무분류
 	OrderBusinessType string `json:"912"`
-	// 주문상태
+	// 주문상태 (접수, 체결, 확인, 취소, 거부)
 	OrderStatus string `json:"913"`
 	// 종목명
 	StockName string `json:"302"`
-	// 주문수량
+	// 주문수량 (단위: 1주)
 	OrderQuantity string `json:"900"`
-	// 주문가격
+	// 주문가격 (단위: 원)
 	OrderPrice string `json:"901"`
-	// 미체결수량
+	// 미체결수량 (단위: 1주)
 	UnfilledQuantity string `json:"902"`
-	// 체결누계금액
+	// 체결누계금액 (단위: 원)
 	CumulativeExecutedAmount string `json:"903"`
-	// 원주문번호
+	// 원주문번호 (원 주문이 없는 경우 '0000000'으로 출력)
 	OriginalOrderNumber string `json:"904"`
-	// 주문구분
+	// 주문구분 ("+/-", 매도, 매수, 매도정정, 매수정정, 매수취소, 매도취소 ※ 영웅문4에서 적색으로 표기되어있으면 +가, 청색으로 표기되어있으면 -가 앞에 기재됩니다)
 	OrderType string `json:"905"`
-	// 매매구분
+	// 매매구분 (보통, 시장가, 조건부지정가, 최유리지정가, 최우선지정가, 보통(IOC), 시장가(IOC), 최유리(IOC), 보통(FOK), 시장가(FOK), 최유리(FOK), 스톰지정가, 중간가, 중간가(IOC), 중간가(FOK), 장전시간외, 장후시간외, 시간외대량, 시간외바스켓, 시간외자사주, 시간외단일가)
 	OrderPriceType string `json:"906"`
-	// 매도수구분
+	// 매도수구분 (1:매도, 2:매수)
 	TradeSide string `json:"907"`
-	// 주문/체결시간
+	// 주문/체결시간 (HHmmss)
 	OrderExecutionTime string `json:"908"`
 	// 체결번호
 	ExecutionNumber string `json:"909"`
@@ -52,11 +52,11 @@ type DomesticOrderFill struct {
 	ExecutionPrice string `json:"910"`
 	// 체결량
 	ExecutionQuantity string `json:"911"`
-	// 현재가
+	// 현재가 (단위: 원, 부호가 포함된 숫자)
 	CurrentPrice string `json:"10"`
-	// (최우선)매도호가
+	// (최우선)매도호가 (단위: 원, 부호가 포함된 숫자)
 	BestAskPrice string `json:"27"`
-	// (최우선)매수호가
+	// (최우선)매수호가 (단위: 원, 부호가 포함된 숫자)
 	BestBidPrice string `json:"28"`
 	// 단위체결가
 	UnitExecutionPrice string `json:"914"`
@@ -68,21 +68,21 @@ type DomesticOrderFill struct {
 	TodayTradingTax string `json:"939"`
 	// 거부사유
 	RejectReason string `json:"919"`
-	// 화면번호
+	// 화면번호 (HTS화면번호)
 	ScreenNumber string `json:"920"`
 	// 터미널번호
 	TerminalNumber string `json:"921"`
-	// 신용구분
+	// 신용구분 (실시간 체결용)
 	ExecutionCreditType string `json:"922"`
-	// 대출일
+	// 대출일 (실시간 체결용)
 	ExecutionLoanDate string `json:"923"`
 	// 시간외단일가_현재가
 	AfterHoursSinglePriceCurrentPrice string `json:"10010"`
-	// 거래소구분
+	// 거래소구분 (0:통합,1:KRX,2:NXT)
 	OrderExchangeType string `json:"2134"`
-	// 거래소구분명
+	// 거래소구분명 (통합,KRX,NXT)
 	ExchangeTypeName string `json:"2135"`
-	// SOR여부
+	// SOR여부 (Y,N)
 	SORFlag string `json:"2136"`
 }
 

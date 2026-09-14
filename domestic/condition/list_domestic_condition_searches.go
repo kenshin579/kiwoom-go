@@ -5,9 +5,10 @@ package condition
 import "context"
 
 // ListDomesticConditionSearchesRequest 는 조건검색 목록조회(ka10171) 요청이다.
+//
+// trnm 은 여기 없다. 값이 CNSRLST 하나로 정해져 있어 호출자가 고를 것이 없고, 비워 두면
+// 서버 응답이 짝을 찾지 못해 ctx 만료까지 조용히 매달린다 — 전송 직전에 아래 메서드가 넣는다.
 type ListDomesticConditionSearchesRequest struct {
-	// TR명 (필수, 7자, CNSRLST고정값)
-	Trnm string `json:"trnm"`
 }
 
 // ListDomesticConditionSearchesResponse 는 조건검색 목록조회(ka10171) 응답이다.
@@ -35,8 +36,15 @@ type ListDomesticConditionSearchesDataItem struct {
 // 메뉴: 국내주식 > 조건검색 > 조건검색 목록조회(ka10171)
 // URL:  /api/dostk/websocket  (trnm: CNSRLST)
 func (c *Client) ListDomesticConditionSearches(ctx context.Context, req ListDomesticConditionSearchesRequest) (*ListDomesticConditionSearchesResponse, error) {
+	// 익명 래퍼로 trnm 을 끼운다. 임베드한 필드는 encoding/json 이 바깥으로 끌어올리므로
+	// 나가는 본문은 {"trnm":"CNSRLST", ...req} 가 된다.
+	body := struct {
+		Trnm string `json:"trnm"`
+		ListDomesticConditionSearchesRequest
+	}{Trnm: "CNSRLST", ListDomesticConditionSearchesRequest: req}
+
 	var out ListDomesticConditionSearchesResponse
-	if err := c.ws.Request(ctx, "CNSRLST", req, &out); err != nil {
+	if err := c.ws.Request(ctx, "CNSRLST", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
