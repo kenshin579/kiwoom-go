@@ -67,6 +67,12 @@ func main() {
 			log.Fatalf("표에 없는 카테고리: %q (API %s). tools/gen/groups.go 에 넣거나 제외 목록에 적어라", menu, id)
 		}
 
+		// 손으로 쓰는 둘(ka10173·usa20290)은 여기서 빠진다.
+		// **BuildTree 앞이어야 한다** — ka10173 은 트리를 접다가 에러를 낸다.
+		if gen.HandWritten(id) {
+			continue
+		}
+
 		name, ok := names[id]
 		if !ok {
 			// 이름표가 없으면 멈춘다. api-id 로 대충 이름을 지으면 나중에 바꿀 수 없다.
@@ -97,16 +103,47 @@ func main() {
 		}
 		seen[key] = id
 
-		code, err := gen.Render(gen.Target{
-			Package:  g.Pkg,
-			GoName:   gen.GoName(name),
-			APIID:    id,
-			APIName:  api.Meta["API 명"],
-			MenuPath: menu,
-			Path:     api.Meta["URL"],
-			Request:  reqTree,
-			Response: resTree,
-		})
+		var code []byte
+		switch g.Template() {
+		case gen.KindRealtime:
+			fields, ferr := gen.RealtimeFields(api)
+			if ferr != nil {
+				log.Fatalf("%s(%s) FID: %v", id, menu, ferr)
+			}
+			code, err = gen.RenderRealtime(gen.RealtimeTarget{
+				Package: g.Pkg,
+				GoName:  gen.GoName(name),
+				Type:    id,
+				APIName: api.Meta["API 명"],
+				Fields:  fields,
+			})
+		case gen.KindCondition:
+			trnm, terr := gen.ConditionTrnm(api)
+			if terr != nil {
+				log.Fatalf("%s(%s) trnm: %v", id, menu, terr)
+			}
+			code, err = gen.RenderCondition(gen.Target{
+				Package:  g.Pkg,
+				GoName:   gen.GoName(name),
+				APIID:    id,
+				APIName:  api.Meta["API 명"],
+				MenuPath: menu,
+				Path:     api.Meta["URL"],
+				Request:  reqTree,
+				Response: resTree,
+			}, trnm)
+		default:
+			code, err = gen.Render(gen.Target{
+				Package:  g.Pkg,
+				GoName:   gen.GoName(name),
+				APIID:    id,
+				APIName:  api.Meta["API 명"],
+				MenuPath: menu,
+				Path:     api.Meta["URL"],
+				Request:  reqTree,
+				Response: resTree,
+			})
+		}
 		if err != nil {
 			log.Fatalf("%s 렌더: %v", id, err)
 		}

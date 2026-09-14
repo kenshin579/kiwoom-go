@@ -95,6 +95,7 @@ package kiwoom
 
 import (
 	"github.com/kenshin579/kiwoom-go/internal/transport"
+	"github.com/kenshin579/kiwoom-go/internal/wstransport"
 {{range .}}	{{.Alias}} "{{.ImportPath}}"
 {{end}})
 
@@ -106,9 +107,12 @@ type Clients struct {
 {{end}}}
 
 // newClients 는 NewClient 가 호출한다.
-func newClients(tr *transport.Client) Clients {
+//
+// tr 은 HTTP 전송, dom·ovs 는 시장별 WebSocket 연결이다 — 그룹의 Kind 가 어느 것을
+// 받을지 정한다.
+func newClients(tr *transport.Client, dom, ovs *wstransport.Conn) Clients {
 	return Clients{
-{{range .}}		{{.Field}}: {{.Alias}}.New(tr),
+{{range .}}		{{.Field}}: {{.Alias}}.New({{if eq .TemplateName "rest"}}tr{{else if eq .Market "domestic"}}dom{{else}}ovs{{end}}),
 {{end}}	}
 }
 `))

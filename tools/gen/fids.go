@@ -1,5 +1,7 @@
 package gen
 
+import "fmt"
+
 // Fid 는 실시간 값 필드 하나다.
 type Fid struct {
 	FID    string // 스펙의 element. 숫자다
@@ -459,4 +461,88 @@ var fidByID = func() map[string]Fid {
 func LookupFid(fid string) (Fid, bool) {
 	f, ok := fidByID[fid]
 	return f, ok
+}
+
+// handWritten 은 생성하지 않고 손으로 쓰는 API 다. 둘을 빼는 이유가 서로 다르다.
+//
+// ka10173 은 응답이 두 벌이다(조회 결과 + REAL 푸시). 스펙에서도 이것만 is_section 으로
+// 본문이 갈라져 BuildTree 가 에러를 낸다. 337개 중 하나를 위해 생성기에 분기를 넣는 것보다,
+// 하나를 손으로 쓰고 생성기를 단순하게 두는 편이 낫다.
+//
+// usa20290 은 다르다 — BuildTree 는 통과한다. 조회 응답 한 벌뿐이고 is_section 도 없다.
+// 빼는 이유는 푸시가 실제로 오는데 그 FID 표가 스펙에 통째로 비어 있어서다
+// (공식 예제도 COLUMNS = {} 로 둔다. SOURCE.md 의 WebSocket 규약 절 참고).
+// 조회는 타입을 붙이고 푸시는 Raw 맵으로만 내야 하므로 역시 손으로 쓴다.
+var handWritten = map[string]bool{
+	"ka10173":  true,
+	"usa20290": true,
+}
+
+// HandWritten 은 생성 대상에서 빼고 손으로 쓰는 API 인지 알려준다.
+//
+// **BuildTree 보다 먼저 물어야 한다** — ka10173 은 트리를 접다가 에러를 내기 때문이다.
+func HandWritten(apiID string) bool { return handWritten[apiID] }
+
+// RealtimeFields 는 실시간 응답의 depth-2 FID 필드를 표와 맞춰 돌려준다.
+//
+// BuildTree 를 거치지 않는다 — 실시간 응답의 values 는 맵이라 LIST 트리로 접을 수 없다
+// (설계 §7). 평평한 필드에서 depth 2 만 순서대로 뽑는다.
+func RealtimeFields(api API) ([]RealtimeField, error) {
+	var out []RealtimeField
+	seen := map[string]bool{}
+	for _, f := range api.Response.Body {
+		if f.Depth != 2 || !isDigitString(f.Element) || seen[f.Element] {
+			continue
+		}
+		seen[f.Element] = true
+		fid, ok := LookupFid(f.Element)
+		if !ok {
+			return nil, fmt.Errorf(
+				"표에 없는 FID: %q(%s). tools/gen/fids.go 에 넣어라", f.Element, f.Korean)
+		}
+		out = append(out, RealtimeField{FID: fid.FID, Name: fid.Name, Korean: f.Korean})
+	}
+	return out, nil
+}
+
+// ConditionTrnm 은 조건검색 요청의 trnm 고정값을 스펙 설명에서 뽑는다.
+//
+// 지어내지 않고 스펙에서 읽는 이유: 미국 쪽은 G 접두어가 붙고(GCNSRLST), 스펙에 두 값이
+// 적힌 자리가 있어 손으로 옮기면 틀리기 쉽다. 설명은 "CNSRLST고정값"·"CNSRREQ 고정값"
+// 처럼 적혀 있어 앞의 대문자 토큰만 뗀다.
+//
+// 틀린 값을 뽑아도 생성 시점에는 조용히 지나가고 실서버에서 WSAPIError 로만 드러난다 —
+// 그래서 fids_test.go 가 8건 전부를 설계 §2 의 표와 대조한다.
+func ConditionTrnm(api API) (string, error) {
+	for _, f := range api.Request.Body {
+		if f.Element != "trnm" {
+			continue
+		}
+		var b []rune
+		for _, r := range f.Description {
+			if r >= 'A' && r <= 'Z' {
+				b = append(b, r)
+				continue
+			}
+			break
+		}
+		if len(b) > 0 {
+			return string(b), nil
+		}
+		return "", fmt.Errorf("trnm 설명에서 고정값을 읽지 못했다: %q", f.Description)
+	}
+	return "", fmt.Errorf("요청에서 trnm 고정값을 찾지 못했다")
+}
+
+// isDigitString 은 FID 처럼 숫자로만 이루어진 요소명인지 본다.
+func isDigitString(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

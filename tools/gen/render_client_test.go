@@ -35,6 +35,10 @@ func TestRenderClients(t *testing.T) {
 	gs := []gen.Group{
 		{Menu: "국내주식 > 시세", Market: "domestic", Pkg: "quote", Field: "DomesticQuote", Korean: "국내주식 시세"},
 		{Menu: "미국주식 > 시세", Market: "overseas", Pkg: "quote", Field: "OverseasQuote", Korean: "미국주식 시세"},
+		{Menu: "국내주식 > 실시간시세", Market: "domestic", Pkg: "realtime",
+			Field: "DomesticRealtime", Korean: "국내주식 실시간시세", Kind: gen.KindRealtime},
+		{Menu: "미국주식 > 조건검색", Market: "overseas", Pkg: "condition",
+			Field: "OverseasCondition", Korean: "미국주식 조건검색", Kind: gen.KindCondition},
 	}
 	src, err := gen.RenderClients(gs)
 	if err != nil {
@@ -50,8 +54,14 @@ func TestRenderClients(t *testing.T) {
 		"type Clients struct {",
 		"DomesticQuote *domesticquote.Client",
 		"OverseasQuote *overseasquote.Client",
-		"func newClients(tr *transport.Client) Clients {",
-		"DomesticQuote: domesticquote.New(tr),",
+		`"github.com/kenshin579/kiwoom-go/internal/wstransport"`,
+		"func newClients(tr *transport.Client, dom, ovs *wstransport.Conn) Clients {",
+		// REST 는 HTTP 전송을, WS 그룹은 시장별 연결을 받는다. 셋이 섞이면
+		// 컴파일은 되는데 국내 구독이 미국 소켓으로 나가는 식으로 조용히 틀어진다.
+		// gofmt 가 키를 정렬하므로 콜론 뒤 칸수는 보지 않는다.
+		"domesticquote.New(tr),",
+		"domesticrealtime.New(dom),",
+		"overseascondition.New(ovs),",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("%q 가 없다\n---\n%s", want, got)

@@ -79,18 +79,20 @@ var Groups = []Group{
 	{"미국주식 > 업종", "overseas", "sector", "OverseasSector", "미국주식 업종", ""},
 	{"미국주식 > 관심종목", "overseas", "watchlist", "OverseasWatchlist", "미국주식 관심종목", ""},
 	{"미국주식 > 투자정보", "overseas", "info", "OverseasInfo", "미국주식 투자정보", ""},
+
+	// 3단계에서 더한 WebSocket 그룹 넷. 기존 25줄은 위치 기반 리터럴이라 Kind 자리가
+	// 빈 문자열이고, 이 넷만 필드 이름을 써서 Kind 를 준다.
+	{Menu: "국내주식 > 실시간시세", Market: "domestic", Pkg: "realtime", Field: "DomesticRealtime", Korean: "국내주식 실시간시세", Kind: KindRealtime},
+	{Menu: "국내주식 > 조건검색", Market: "domestic", Pkg: "condition", Field: "DomesticCondition", Korean: "국내주식 조건검색", Kind: KindCondition},
+	{Menu: "미국주식 > 실시간시세", Market: "overseas", Pkg: "realtime", Field: "OverseasRealtime", Korean: "미국주식 실시간시세", Kind: KindRealtime},
+	{Menu: "미국주식 > 조건검색", Market: "overseas", Pkg: "condition", Field: "OverseasCondition", Korean: "미국주식 조건검색", Kind: KindCondition},
 }
 
 // skipped 는 **일부러** 생성하지 않는 카테고리다.
 //
-// 실시간·조건검색은 WebSocket 이라 프로토콜이 다르고(3단계), OAuth 는 internal/auth 가
-// 손으로 다룬다. 여기 적어 두는 이유는 Groups 에 없는 카테고리를 전부 에러로 잡기 위해서다 —
-// 그래야 새 카테고리가 조용히 빠지지 않는다.
+// OAuth 는 internal/auth 가 손으로 다룬다. 여기 적어 두는 이유는 Groups 에 없는
+// 카테고리를 전부 에러로 잡기 위해서다 — 그래야 새 카테고리가 조용히 빠지지 않는다.
 var skipped = map[string]bool{
-	"국내주식 > 실시간시세":      true,
-	"미국주식 > 실시간시세":      true,
-	"국내주식 > 조건검색":       true,
-	"미국주식 > 조건검색":       true,
 	"OAuth 인증 > 접근토큰발급": true,
 	"OAuth 인증 > 접근토큰폐기": true,
 }
