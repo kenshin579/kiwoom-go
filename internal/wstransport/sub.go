@@ -3,6 +3,7 @@ package wstransport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -17,7 +18,9 @@ type Delivery struct {
 	Item   string          // 종목코드
 	Values json.RawMessage // FID → 값
 	Time   time.Time       // 수신 시각
-	Err    error           // *GapError · *SlowConsumerError. 이때 나머지는 비어 있다
+	// Err 은 *GapError · *ReconnectingError · *SlowConsumerError 다.
+	// 이때 나머지 필드는 비어 있다.
+	Err error
 }
 
 // realPayload 는 REAL 메시지의 data 원소다.
@@ -35,22 +38,74 @@ type subKey struct{ typ, item string }
 
 // sub 은 (타입, 종목) 하나에 대한 구독 자리다.
 //
-// dropped·closed 는 c.subMu 가 지킨다. 수신 고루틴(routeReal)과 해지 고루틴이
+// pendingGap·dropped·closed 는 c.subMu 가 지킨다. 수신 고루틴(routeReal)과 해지 고루틴이
 // 같은 자리를 함께 만지므로 채널 송신까지 그 락 안에서 한다 — 송신은 논블로킹이라
 // 락을 들고 있어도 막히지 않는다.
 type sub struct {
-	key     subKey
-	ch      chan Delivery
-	dropped int
-	closed  bool
+	key subKey
+	ch  chan Delivery
+
+	// pendingGap 은 아직 흘리지 못한 구멍이다. 자리가 나는 첫 순간에 보낸다.
+	//
+	// dropped 와 나란히 있지만 **뜻이 다르다.** dropped 는 "느려서 버렸다" 고, 이것은
+	// "그 사이 연결이 끊겼다" 다. 자리가 없다고 이것을 dropped 로 돌리면 사용자는
+	// 끊겼다는 사실을 영영 모르고, 대신 사실이 아닌 느림 경고를 받는다.
+	pendingGap *GapError
+	dropped    int
+	closed     bool
 }
+
+// latchGap 은 구멍을 래치에 얹는다. 이미 있으면 구간을 합친다 — 겹친 구멍 둘을
+// 따로 알릴 방법이 없다면, 넓은 쪽으로 합치는 편이 좁게 잘라 말하는 것보다 정직하다.
+//
+// 자리마다 제 복사본을 든다. 하나를 여럿이 나눠 들면 합치는 순간 남의 구간까지 넓힌다.
+// subMu 를 들고 부른다.
+func (s *sub) latchGap(since, until time.Time) {
+	if s.pendingGap == nil {
+		s.pendingGap = &GapError{Since: since, Until: until}
+		return
+	}
+	if since.Before(s.pendingGap.Since) {
+		s.pendingGap.Since = since
+	}
+	if until.After(s.pendingGap.Until) {
+		s.pendingGap.Until = until
+	}
+}
+
+// flushGap 은 래치의 구멍을 흘린다. 흘렸거나 흘릴 것이 없으면 true.
+// subMu 를 들고 부른다.
+func (s *sub) flushGap() bool {
+	if s.pendingGap == nil {
+		return true
+	}
+	select {
+	case s.ch <- Delivery{Err: s.pendingGap, Time: s.pendingGap.Until}:
+		s.pendingGap = nil
+		return true
+	default:
+		return false
+	}
+}
+
+// errNoItems 는 종목 없이 구독하려 했다는 뜻이다.
+//
+// 구독 자리는 (타입, 종목)으로 잡힌다 — 종목이 없으면 자리가 하나도 생기지 않아 어떤
+// 실시간도 이 채널로 오지 않고, 해지될 때 닫을 자리도 없어 채널이 영영 열린 채 남는다.
+// 소비자는 for range 에서 영원히 막힌다. 조용히 그렇게 두느니 여기서 거절한다.
+var errNoItems = errors.New("kiwoom: 구독할 종목이 없다 — items 가 비어 있다")
 
 // Subscribe 는 실시간 등록(REG)을 보내고 채널을 준다.
 //
 // ctx 가 취소되면 해지(REMOVE)를 보내고 채널을 닫는다. 연결이 Close 되어도 닫는다 —
 // 그러지 않으면 이 고루틴이 영영 남는다. buf 는 채널 버퍼 크기다 — 가득 차면
 // 이벤트를 버리고 *SlowConsumerError 를 흘린다. 소켓 전체를 막지 않는다.
+//
+// items 가 비어 있으면 에러다(errNoItems).
 func (c *Conn) Subscribe(ctx context.Context, typ string, items []string, buf int) (<-chan Delivery, error) {
+	if len(items) == 0 {
+		return nil, errNoItems
+	}
 	if buf < 1 {
 		buf = 1
 	}
@@ -192,7 +247,8 @@ func (c *Conn) routeReal(env envelope) {
 //
 // 알림은 **다음 번에** 자리가 나면 흘린다. 가득 찼을 때 알림을 밀어 넣으려 해 봐야
 // 그것도 가득 차 있어 같이 버려지고, 그러면 소비자는 자기가 놓친 것을 영영 모른다.
-// 그래서 버린 건수를 들고 있다가 자리가 나는 첫 순간에 한 번에 알린다.
+// 그래서 버린 건수를 들고 있다가 자리가 나는 첫 순간에 한 번에 알린다. 구멍도 같은
+// 방식으로 래치에 들고 있다가 흘린다.
 func (c *Conn) deliver(s *sub, d Delivery) {
 	c.subMu.Lock()
 	defer c.subMu.Unlock()
@@ -200,6 +256,30 @@ func (c *Conn) deliver(s *sub, d Delivery) {
 		return
 	}
 
+	// 밀린 알림이 데이터보다 **먼저** 가야 한다. 구멍 뒤에 온 값을 구멍 전의 것으로
+	// 읽으면 사용자가 메꿀 구간을 잘못 잡는다.
+	if !c.flushNotices(s) {
+		// 아직도 자리가 없다 — 이번 것도 버리고 다음을 기약한다.
+		s.dropped++
+		return
+	}
+
+	select {
+	case s.ch <- d:
+	default:
+		s.dropped++
+	}
+}
+
+// flushNotices 는 밀린 알림을 순서대로 흘린다. 전부 흘렸으면 true.
+//
+// 구멍이 먼저다. 끊긴 것이 느린 것보다 무겁고, 자리가 한 칸뿐일 때 하나만 통과한다면
+// 그것은 구멍이어야 한다 — 느림은 다음에 또 알릴 수 있지만 구멍은 지금 이 한 건이다.
+// subMu 를 들고 부른다.
+func (c *Conn) flushNotices(s *sub) bool {
+	if !s.flushGap() {
+		return false
+	}
 	if s.dropped > 0 {
 		select {
 		case s.ch <- Delivery{
@@ -208,15 +288,8 @@ func (c *Conn) deliver(s *sub, d Delivery) {
 		}:
 			s.dropped = 0
 		default:
-			// 아직도 자리가 없다 — 이번 것도 버리고 다음을 기약한다.
-			s.dropped++
-			return
+			return false
 		}
 	}
-
-	select {
-	case s.ch <- d:
-	default:
-		s.dropped++
-	}
+	return true
 }

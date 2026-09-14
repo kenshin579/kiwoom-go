@@ -346,3 +346,39 @@ func recvDelivery(t *testing.T, ch <-chan Delivery) Delivery {
 	}
 	return Delivery{}
 }
+
+// 빈 items 구독은 에러여야 한다.
+//
+// 구독 자리는 (타입, 종목)으로 잡힌다. 종목이 없으면 자리가 하나도 생기지 않아 어떤
+// 실시간도 이 채널로 오지 않고, 해지될 때 닫을 자리도 없어 채널이 영영 열린 채 남는다.
+// 소비자는 for range 에서 영원히 막힌다 — 조용히 그렇게 두느니 여기서 거절한다.
+func TestSubscribe_빈_items_는_에러다(t *testing.T) {
+	f := newFakeServer(t)
+	c := New(f.wsURL(), "", &stubToken{token: "TKN"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := c.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+
+	for _, items := range [][]string{{}, nil} {
+		ch, err := c.Subscribe(ctx, "0B", items, 4)
+		if err == nil {
+			t.Fatalf("items=%v 로 구독이 통과했다 — 채널이 영영 닫히지 않는다", items)
+		}
+		if !errors.Is(err, errNoItems) {
+			t.Errorf("에러 = %v, 기대 errNoItems", err)
+		}
+		if ch != nil {
+			t.Errorf("에러인데 채널을 줬다")
+		}
+	}
+
+	// 거절이 REG 까지 가지도 않았다.
+	for _, p := range f.packets() {
+		if p["trnm"] == "REG" {
+			t.Errorf("빈 구독이 REG 를 보냈다: %v", p)
+		}
+	}
+}

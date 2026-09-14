@@ -20,6 +20,11 @@ type Event[T any] = stream.Event[T]
 type (
 	// GapError 는 끊겼다가 다시 붙은 구간이다. 그 사이 이벤트는 받지 못했다.
 	GapError = wstransport.GapError
+	// ReconnectingError 는 아직 다시 붙지 못했다는 뜻이다. 붙을 때까지 되풀이해 온다.
+	//
+	// GapError 는 **붙은 뒤에야** 온다. 장애가 이어지는 동안 이것이 없으면 구독자는
+	// "장이 조용하다" 와 "한 시간째 못 붙고 있다" 를 구분할 수 없다.
+	ReconnectingError = wstransport.ReconnectingError
 	// SlowConsumerError 는 구독 채널이 가득 차 이벤트를 버렸다는 뜻이다.
 	SlowConsumerError = wstransport.SlowConsumerError
 	// WSLoginError 는 WebSocket 로그인이 거부된 것이다.
