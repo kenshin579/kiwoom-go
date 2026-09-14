@@ -7,24 +7,18 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kenshin579/kiwoom-go/domestic/chart"
-	"github.com/kenshin579/kiwoom-go/domestic/quote"
-	"github.com/kenshin579/kiwoom-go/domestic/stock"
 	"github.com/kenshin579/kiwoom-go/internal/auth"
 	"github.com/kenshin579/kiwoom-go/internal/transport"
 )
 
 // Client 는 키움 API 클라이언트다. 하위 클라이언트로 각 API 그룹에 접근한다.
+//
+// Clients 를 임베딩하므로 c.DomesticQuote 처럼 바로 쓴다. 그 목록은 생성물
+// subclients.go 에 있다.
 type Client struct {
 	baseURL string
-	http    *transport.Client
 
-	// DomesticQuote 는 국내주식 시세.
-	DomesticQuote *quote.Client
-	// DomesticChart 는 국내주식 차트.
-	DomesticChart *chart.Client
-	// DomesticStock 은 국내주식 종목정보.
-	DomesticStock *stock.Client
+	Clients
 }
 
 // NewClient 는 앱키·시크릿키로 클라이언트를 만든다.
@@ -52,11 +46,8 @@ func NewClient(appKey, secretKey string, opts ...Option) (*Client, error) {
 	tok := auth.New(o.baseURL, appKey, secretKey, hc)
 	tr := transport.New(o.baseURL, hc, tok)
 	return &Client{
-		baseURL:       o.baseURL,
-		http:          tr,
-		DomesticQuote: quote.New(tr),
-		DomesticChart: chart.New(tr),
-		DomesticStock: stock.New(tr),
+		baseURL: o.baseURL,
+		Clients: newClients(tr),
 	}, nil
 }
 

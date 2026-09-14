@@ -105,7 +105,36 @@ func TestDo_본문오류는_200이어도_에러다(t *testing.T) {
 	}
 }
 
-func TestDo_401이면_한번만_재발급한다(t *testing.T) {
+func TestDo_401이면_토큰만_버리고_에러를_돌려준다(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"return_code":8005,"return_msg":"토큰 만료"}`))
+	}))
+	defer srv.Close()
+
+	tok := &stubToken{val: "TK"}
+	c := transport.New(srv.URL, srv.Client(), tok)
+	_, err := c.Do(context.Background(), transport.Request{APIID: "ka10004", Path: "/x"}, nil)
+	if err == nil {
+		t.Fatal("에러여야 한다")
+	}
+	var ae *transport.APIError
+	if !errors.As(err, &ae) || ae.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("401 APIError 여야 한다: %v", err)
+	}
+	// 재시도하면 주문이 두 번 들어갈 수 있다 — 정확히 한 번만 보내야 한다.
+	if hits != 1 {
+		t.Errorf("호출 = %d, want 1 (재시도 금지)", hits)
+	}
+	if atomic.LoadInt32(&tok.invalidated) != 1 {
+		t.Errorf("Invalidate 호출 = %d, want 1", tok.invalidated)
+	}
+}
+
+func TestDo_401_다음_호출은_새_토큰으로_나간다(t *testing.T) {
+	// 401 로 토큰을 버렸으므로 다음 호출은 스스로 회복돼야 한다.
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if atomic.AddInt32(&hits, 1) == 1 {
@@ -119,32 +148,15 @@ func TestDo_401이면_한번만_재발급한다(t *testing.T) {
 
 	tok := &stubToken{val: "TK"}
 	c := transport.New(srv.URL, srv.Client(), tok)
+
+	if _, err := c.Do(context.Background(), transport.Request{APIID: "ka10004", Path: "/x"}, nil); err == nil {
+		t.Fatal("첫 호출은 에러여야 한다")
+	}
 	if _, err := c.Do(context.Background(), transport.Request{APIID: "ka10004", Path: "/x"}, nil); err != nil {
-		t.Fatalf("재시도로 성공해야 한다: %v", err)
+		t.Fatalf("둘째 호출은 성공해야 한다: %v", err)
 	}
 	if hits != 2 {
 		t.Errorf("호출 = %d, want 2", hits)
-	}
-	if atomic.LoadInt32(&tok.invalidated) != 1 {
-		t.Errorf("Invalidate 호출 = %d, want 1", tok.invalidated)
-	}
-}
-
-func TestDo_401이_계속되면_포기한다(t *testing.T) {
-	var hits int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&hits, 1)
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"return_code":8005,"return_msg":"토큰 만료"}`))
-	}))
-	defer srv.Close()
-
-	c := transport.New(srv.URL, srv.Client(), &stubToken{val: "TK"})
-	if _, err := c.Do(context.Background(), transport.Request{APIID: "ka10004", Path: "/x"}, nil); err == nil {
-		t.Fatal("두 번째도 401 이면 에러여야 한다")
-	}
-	if hits != 2 {
-		t.Errorf("호출 = %d, want 2 (무한 재시도 금지)", hits)
 	}
 }
 

@@ -57,8 +57,13 @@ func New(baseURL string, hc *http.Client, token TokenSource) *Client {
 
 // Do 는 요청 한 건을 보내고 본문을 out 에 넣는다. out 이 nil 이면 본문을 버린다.
 //
-// 401 을 받으면 토큰을 버리고 **한 번만** 다시 시도한다. 그 외에는 재시도하지 않는다 —
-// 키움의 429/5xx 정책을 모르는 채로 재시도하면 한도를 더 빨리 태운다.
+// **재시도하지 않는다.** 401 을 받으면 토큰만 버리고 에러를 돌려주므로, 다음 호출이 새
+// 토큰을 받아 스스로 회복된다.
+//
+// 예전에는 401 에서 같은 요청을 한 번 더 보냈다. 읽기 전용일 때는 안전했지만, 주문 API 가
+// 들어오면 첫 요청이 서버에 닿아 체결됐는데 응답만 401 로 보이는 경우 **같은 주문이 두 번**
+// 들어간다. 어떤 API 가 돈을 움직이는지 스펙이 알려주지 않으므로 카테고리로 가르지 않고
+// 규칙을 하나만 둔다. 토큰은 만료 60초 전에 미리 갱신하므로 401 자체가 드물다.
 func (c *Client) Do(ctx context.Context, req Request, out any, opts ...Option) (Meta, error) {
 	for _, fn := range opts {
 		fn(&req)
@@ -67,7 +72,6 @@ func (c *Client) Do(ctx context.Context, req Request, out any, opts ...Option) (
 	var ae *APIError
 	if err != nil && errors.As(err, &ae) && ae.StatusCode == http.StatusUnauthorized {
 		c.token.Invalidate()
-		return c.do(ctx, req, out)
 	}
 	return meta, err
 }
