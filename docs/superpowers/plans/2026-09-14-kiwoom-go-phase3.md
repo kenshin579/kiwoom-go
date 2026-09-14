@@ -1672,7 +1672,7 @@ type Fid struct {
 // `시간` vs `체결시간`). 의미가 실제로 충돌하는 FID 는 없어서 하나로 접었고,
 // 버린 표기는 그 줄 주석에 남겼다.
 var Fids = []Fid{
-	{"9", "MarketCapBillion", "시가총액(억)"},
+	{"9", "MarketCapHundredMillionWon", "시가총액(억)"},
 	{"10", "CurrentPrice", "현재가"},
 	{"11", "PrevDayDiff", "전일대비"},
 	{"12", "ChangeRate", "등락율"},
@@ -1701,7 +1701,12 @@ func LookupFid(fid string) (Fid, bool) {
 **이름 규칙:**
 - 한글명을 영어로 옮긴다. 축약하지 않는다 — `현재가` → `CurrentPrice`(`CurPrc` 아님).
 - 번호가 붙은 것은 뒤에 숫자를 붙인다 — `매도호가1` → `AskPrice1`.
-- 단위 괄호는 이름에 녹인다 — `시가총액(억)` → `MarketCapBillion`.
+- 단위 괄호는 이름에 녹인다 — `시가총액(억)` → `MarketCapHundredMillionWon`.
+  **자릿수를 확인하라** — 억은 10⁸, Billion 은 10⁹ 다. `MarketCapBillion` 이라고 쓰면
+  읽는 사람이 값을 10배 틀리게 보고, 그걸 알려 줄 신호가 아무 데도 없다.
+- **한글명만 보지 말고 스펙의 `description` 열을 함께 보라.** 단위(`단위: 억원`·`단위: 백만원`)와
+  코드 도메인(`1:매도, 2:매수`)이 거기 있다. 한글명에 없는 것이 많고, 애매한 이름은 대개
+  거기서 갈린다.
 - Go 식별자로 시작할 수 없는 이름을 만들지 않는다.
 - **같은 이름을 두 FID 에 주지 않는다.** Step 3 의 테스트가 잡는다.
 
