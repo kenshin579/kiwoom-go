@@ -24,6 +24,9 @@ const (
 	OverseasPath = "/api/us/websocket"
 )
 
+// errClosed 는 이미 닫힌 연결에 무언가를 붙이려 했다는 뜻이다.
+var errClosed = errors.New("kiwoom: websocket 이 이미 닫혔다")
+
 // TokenSource 는 접근토큰을 준다. internal/auth.Source 가 만족한다.
 type TokenSource interface {
 	Token(ctx context.Context) (string, error)
@@ -48,9 +51,14 @@ type Conn struct {
 	path  string
 	token TokenSource
 
+	// retryDelay 는 재연결 간격이다. 0 이면 defaultRetryDelay. 테스트가 줄인다.
+	//
+	// Connect 전에 한 번만 정한다 — 붙은 뒤에 바꾸는 용도가 아니다.
+	retryDelay time.Duration
+
 	mu     sync.Mutex
 	ws     *websocket.Conn
-	done   chan struct{}      // 수신 루프 종료 신호
+	done   chan struct{}      // 지금 도는 수신 루프의 종료 신호. Close 가 기다린다
 	life   context.Context    // 연결의 수명. Connect 의 ctx 와 **다르다**
 	stop   context.CancelFunc // Close 가 부른다
 	closed bool               // Close 뒤에는 재연결하지 않는다
@@ -58,11 +66,11 @@ type Conn struct {
 	// subMu 는 구독 지도를 지킨다. 수신 고루틴과 호출자 고루틴이 함께 만진다.
 	subMu sync.Mutex
 	subs  map[subKey][]*sub
-	regs  []registration // 재연결 때 다시 보낼 등록(Task 4 가 읽는다)
+	regs  []*registration // 재연결 때 다시 보낼 등록. 해지되면 여기서도 빠진다
 
 	// reqMu 는 요청 대기자를 지킨다. 짝짓기 열쇠가 trnm 뿐이라 trnm 당 한 건이다.
 	reqMu sync.Mutex
-	reqs  map[string]chan envelope
+	reqs  map[string]chan reqResult
 }
 
 // New 는 연결기를 만든다. 아직 다이얼하지 않는다.
@@ -131,10 +139,25 @@ func (c *Conn) connectOnce(ctx context.Context) error {
 	}
 
 	c.mu.Lock()
+	if c.closed {
+		// 붙는 사이에 Close 가 왔다. 새 소켓을 달면 Close 가 놓친 것이 된다.
+		c.mu.Unlock()
+		_ = ws.CloseNow()
+		return errClosed
+	}
+	old := c.ws
 	c.ws = ws
 	c.done = make(chan struct{})
 	done := c.done
 	c.mu.Unlock()
+
+	// 이전 소켓을 **반드시** 닫는다.
+	//
+	// 덮어쓰기만 하면 끊길 때마다 연결이 샌다. 특히 읽기 실패의 원인이 깨진 메시지일
+	// 때는 소켓 자체가 멀쩡해서, 닫지 않으면 서버 쪽 연결이 그대로 살아남는다.
+	if old != nil {
+		_ = old.CloseNow()
+	}
 
 	go c.readLoop(c.lifeCtx(), ws, done)
 	return nil
@@ -159,6 +182,7 @@ func (c *Conn) readLoop(life context.Context, ws *websocket.Conn, done chan stru
 	for {
 		env, err := readEnvelope(life, ws)
 		if err != nil {
+			c.onReadFailure(life, ws)
 			return
 		}
 		// PING 은 받은 것을 그대로 되돌려 보내고 위로 올리지 않는다.
@@ -170,6 +194,26 @@ func (c *Conn) readLoop(life context.Context, ws *websocket.Conn, done chan stru
 		}
 		c.dispatch(env)
 	}
+}
+
+// onReadFailure 는 읽기가 실패했을 때 — 즉 이 연결이 끝났을 때 — 를 다룬다.
+//
+// 두 가지를 한다. 대기 중인 요청을 깨우고, 재연결을 띄운다.
+func (c *Conn) onReadFailure(life context.Context, ws *websocket.Conn) {
+	// 조건검색 대기자는 **재전송하지 않는다.** 끊겼다고 알려 주고 호출자가 정하게
+	// 한다 — 그러지 않으면 ctx 가 만료될 때까지 아무것도 모른 채 기다린다.
+	c.failRequests(errDisconnected)
+
+	c.mu.Lock()
+	closed := c.closed
+	current := c.ws == ws
+	c.mu.Unlock()
+	// closed 면 Close 가 끊은 것이다. current 가 아니면 이미 다른 소켓이 달렸다 —
+	// 어느 쪽이든 재연결을 띄우면 루프가 둘이 된다.
+	if closed || !current || life.Err() != nil {
+		return
+	}
+	go c.reconnectLoop(life, time.Now())
 }
 
 // dispatch 는 PING 이 아닌 메시지를 요청 대기자 또는 구독자에게 보낸다.
@@ -184,20 +228,28 @@ func (c *Conn) dispatch(env envelope) {
 }
 
 // Close 는 연결을 닫는다. 두 번 불러도 안전하다.
+//
+// 수신 루프가 **실제로 끝난 뒤에** 반환한다. closed 를 c.mu 아래에서 세우므로,
+// 이 뒤로는 connectOnce 가 새 소켓을 달지 못한다 — 기다릴 대상이 하나로 고정된다.
 func (c *Conn) Close() error {
 	c.mu.Lock()
 	c.closed = true
 	stop := c.stop
 	ws := c.ws
+	done := c.done
 	c.ws = nil
 	c.mu.Unlock()
 	if stop != nil {
 		stop()
 	}
-	if ws == nil {
-		return nil
+	var err error
+	if ws != nil {
+		err = ws.CloseNow()
 	}
-	return ws.CloseNow()
+	if done != nil {
+		<-done
+	}
+	return err
 }
 
 func readEnvelope(ctx context.Context, ws *websocket.Conn) (envelope, error) {

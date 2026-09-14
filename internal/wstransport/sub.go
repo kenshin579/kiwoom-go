@@ -66,11 +66,14 @@ func (c *Conn) Subscribe(ctx context.Context, typ string, items []string, buf in
 		c.subs[s.key] = append(c.subs[s.key], s)
 		made = append(made, s)
 	}
-	// regs 는 재연결이 다시 보낼 등록이다(Task 4). 지금은 채우기만 한다.
-	c.regs = append(c.regs, registration{typ: typ, items: items})
+	// regs 는 재연결이 다시 보낼 등록이다. 해지되면 여기서도 빼야 한다 —
+	// 남겨 두면 재연결이 구독자 없는 종목을 계속 다시 등록한다.
+	reg := &registration{typ: typ, items: items}
+	c.regs = append(c.regs, reg)
 	c.subMu.Unlock()
 
 	if err := c.sendReg(ctx, "REG", typ, items); err != nil {
+		c.dropReg(reg)
 		c.closeSubs(made, ch)
 		return nil, err
 	}
@@ -81,6 +84,9 @@ func (c *Conn) Subscribe(ctx context.Context, typ string, items []string, buf in
 		case <-ctx.Done():
 		case <-life.Done():
 		}
+		// regs 에서 **먼저** 뺀다. REMOVE 를 보내는 사이에 재연결이 끼어들면
+		// 방금 해지한 것을 다시 등록해 버린다.
+		c.dropReg(reg)
 		// 해지는 best-effort 다. 연결이 이미 죽었으면 보낼 곳이 없다.
 		// 그래도 채널은 반드시 닫는다.
 		rmCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -92,10 +98,25 @@ func (c *Conn) Subscribe(ctx context.Context, typ string, items []string, buf in
 	return ch, nil
 }
 
-// registration 은 재연결 때 다시 보낼 등록이다(Task 4).
+// registration 은 재연결 때 다시 보낼 등록이다.
+//
+// 값이 아니라 포인터로 들고 다닌다 — 해지할 때 "내가 넣은 그것" 을 지워야 하는데,
+// 같은 (typ, items) 로 두 번 구독할 수 있어 값 비교로는 남의 것을 지운다.
 type registration struct {
 	typ   string
 	items []string
+}
+
+// dropReg 는 해지된 등록을 재연결 목록에서 뺀다.
+func (c *Conn) dropReg(r *registration) {
+	c.subMu.Lock()
+	defer c.subMu.Unlock()
+	for i, x := range c.regs {
+		if x == r {
+			c.regs = append(c.regs[:i:i], c.regs[i+1:]...)
+			return
+		}
+	}
 }
 
 func (c *Conn) sendReg(ctx context.Context, trnm, typ string, items []string) error {

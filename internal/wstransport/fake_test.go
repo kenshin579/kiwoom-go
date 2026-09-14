@@ -13,6 +13,13 @@ import (
 	"github.com/coder/websocket"
 )
 
+// packet 은 서버가 받은 패킷 하나다. 몇 번째 연결에서 받았는지 함께 들고 있다 —
+// 재연결 뒤에 무엇이 다시 왔는지 가르려면 연결 번호가 있어야 한다.
+type packet struct {
+	conn int
+	m    map[string]any
+}
+
 // fakeServer 는 키움 WS 서버 흉내다.
 //
 // 실서버 없이 로그인·PING·등록·재연결을 전부 검증하려면 이게 두꺼워야 한다.
@@ -21,8 +28,9 @@ type fakeServer struct {
 	*httptest.Server
 
 	mu       sync.Mutex
-	received []map[string]any // 서버가 받은 패킷 전부(로그인 포함)
-	conns    int              // 몇 번 연결됐나 — 재연결 검증용
+	received []packet // 서버가 받은 패킷 전부(로그인 포함)
+	conns    int      // 몇 번 연결됐나 — 재연결 검증용
+	live     int      // 지금 살아 있는 연결 수 — 소켓 누수 검증용
 
 	// loginCode 는 로그인 응답의 return_code. 0 이 정상.
 	loginCode int
@@ -31,6 +39,11 @@ type fakeServer struct {
 	// beforeLoginAck 는 로그인 응답을 보내기 **전에** 불린다.
 	// 규약을 어기는 서버(로그인 응답보다 다른 메시지가 먼저 오는 경우)를 흉내낼 때 쓴다.
 	beforeLoginAck func(c *websocket.Conn)
+	// silentLogin 이면 로그인 응답을 아예 보내지 않는다. 끊지도 않는다 —
+	// 클라이언트가 ctx 로 풀리는지 보는 용도라 소켓은 살려 둬야 한다.
+	silentLogin bool
+	// closeOnAccept 면 로그인 패킷을 읽지도 않고 바로 끊는다.
+	closeOnAccept bool
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -46,16 +59,30 @@ func newFakeServer(t *testing.T) *fakeServer {
 		f.mu.Lock()
 		f.conns++
 		n := f.conns
+		f.live++
 		f.mu.Unlock()
+		defer func() {
+			f.mu.Lock()
+			f.live--
+			f.mu.Unlock()
+		}()
+
+		if f.closeOnAccept {
+			return
+		}
 
 		// 로그인 패킷을 받아 응답한다.
 		var login map[string]any
 		if err := f.readJSON(c, &login); err != nil {
 			return
 		}
-		f.record(login)
+		f.record(n, login)
 		if f.beforeLoginAck != nil {
 			f.beforeLoginAck(c)
+		}
+		if f.silentLogin {
+			<-r.Context().Done() // 응답하지 않고, 끊지도 않는다
+			return
 		}
 		_ = f.writeJSON(c, map[string]any{
 			"trnm": "LOGIN", "return_code": f.loginCode, "return_msg": "",
@@ -71,7 +98,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 			if err := f.readJSON(c, &m); err != nil {
 				return
 			}
-			f.record(m)
+			f.record(n, m)
 		}
 	}))
 	t.Cleanup(f.Close)
@@ -83,23 +110,47 @@ func (f *fakeServer) wsURL() string {
 	return strings.Replace(f.URL, "http://", "ws://", 1)
 }
 
-func (f *fakeServer) record(m map[string]any) {
+func (f *fakeServer) record(n int, m map[string]any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.received = append(f.received, m)
+	f.received = append(f.received, packet{conn: n, m: m})
 }
 
-// packets 는 지금까지 받은 패킷을 복사해 돌려준다.
+// packets 는 지금까지 받은 패킷을 연결 구분 없이 돌려준다.
 func (f *fakeServer) packets() []map[string]any {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]map[string]any(nil), f.received...)
+	out := make([]map[string]any, 0, len(f.received))
+	for _, p := range f.received {
+		out = append(out, p.m)
+	}
+	return out
+}
+
+// packetsOn 은 n 번째 연결에서 받은 패킷만 돌려준다.
+func (f *fakeServer) packetsOn(n int) []map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []map[string]any
+	for _, p := range f.received {
+		if p.conn == n {
+			out = append(out, p.m)
+		}
+	}
+	return out
 }
 
 func (f *fakeServer) connCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.conns
+}
+
+// liveCount 는 아직 닫히지 않은 연결 수다. 재연결이 이전 소켓을 흘리면 여기가 는다.
+func (f *fakeServer) liveCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.live
 }
 
 func (f *fakeServer) readJSON(c *websocket.Conn, v any) error {
@@ -117,6 +168,11 @@ func (f *fakeServer) writeJSON(c *websocket.Conn, v any) error {
 	if err != nil {
 		return err
 	}
+	return f.writeRaw(c, b)
+}
+
+// writeRaw 는 바이트를 그대로 보낸다. 깨진 JSON 을 흉내낼 때 쓴다.
+func (f *fakeServer) writeRaw(c *websocket.Conn, b []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return c.Write(ctx, websocket.MessageText, b)
