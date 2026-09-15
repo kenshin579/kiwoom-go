@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/kenshin579/kiwoom-go/internal/wire"
 )
 
 // bodyPeek 은 실패 시 에러에 담을 원문 길이.
@@ -121,16 +123,28 @@ func (c *Client) do(ctx context.Context, req Request, out any) (Meta, error) {
 	meta := Meta{ContYN: resp.Header.Get("cont-yn"), NextKey: resp.Header.Get("next-key")}
 
 	// 업무 오류는 HTTP 200 + return_code 로 온다. 상태코드만 보면 놓친다.
+	//
+	// return_code 는 엔드포인트에 따라 int 로도 숫자 문자열로도 온다 — wire.Code 가 둘 다 받는다.
 	var env struct {
-		ReturnCode int    `json:"return_code"`
-		ReturnMsg  string `json:"return_msg"`
+		ReturnCode wire.Code `json:"return_code"`
+		ReturnMsg  string    `json:"return_msg"`
 	}
-	_ = json.Unmarshal(raw, &env)
+	// 봉투 파싱 실패를 **삼키지 않는다.** 예전에는 이 에러를 버렸고, 그래서 서버가
+	// `"return_code":"8005"` 로 보내면 봉투가 통째로 영값이 되어 ReturnCode == 0 —
+	// 바로 위 주석이 막겠다던 "200 + 업무 오류" 가 조용히 성공으로 통과했다.
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return meta, &APIError{
+			StatusCode: resp.StatusCode,
+			ReturnMsg:  "응답 봉투(return_code) 파싱 실패: " + err.Error(),
+			APIID:      req.APIID,
+			Body:       peek(raw),
+		}
+	}
 
 	if resp.StatusCode != http.StatusOK || env.ReturnCode != 0 {
 		return meta, &APIError{
 			StatusCode: resp.StatusCode,
-			ReturnCode: env.ReturnCode,
+			ReturnCode: env.ReturnCode.Int(),
 			ReturnMsg:  firstNonEmpty(env.ReturnMsg, resp.Status),
 			APIID:      req.APIID,
 			Body:       peek(raw),

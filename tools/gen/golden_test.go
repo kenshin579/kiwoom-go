@@ -107,6 +107,11 @@ func renderAll(t *testing.T) map[string][]byte {
 			}
 			t.Fatalf("표에 없는 카테고리: %q (API %s). tools/gen/groups.go 를 고쳐라", menu, id)
 		}
+		// main.go 와 같은 갈래를 탄다 — 손으로 쓰는 둘은 기대 목록에 넣지 않는다.
+		// **BuildTree 앞이어야 한다**(ka10173 은 트리를 접다가 에러를 낸다).
+		if gen.HandWritten(id) {
+			continue
+		}
 		name, ok := names[id]
 		if !ok {
 			t.Fatalf("이름표 없는 API: %s (%s)", id, menu)
@@ -121,16 +126,47 @@ func renderAll(t *testing.T) map[string][]byte {
 			t.Fatalf("%s(%s) 응답 트리: %v", id, menu, err)
 		}
 
-		code, err := gen.Render(gen.Target{
-			Package:  g.Pkg,
-			GoName:   gen.GoName(name),
-			APIID:    id,
-			APIName:  api.Meta["API 명"],
-			MenuPath: menu,
-			Path:     api.Meta["URL"],
-			Request:  reqTree,
-			Response: resTree,
-		})
+		var code []byte
+		switch g.Template() {
+		case gen.KindRealtime:
+			fields, ferr := gen.RealtimeFields(api)
+			if ferr != nil {
+				t.Fatalf("%s(%s) FID: %v", id, menu, ferr)
+			}
+			code, err = gen.RenderRealtime(gen.RealtimeTarget{
+				Package: g.Pkg,
+				GoName:  gen.GoName(name),
+				Type:    id,
+				APIName: api.Meta["API 명"],
+				Fields:  fields,
+			})
+		case gen.KindCondition:
+			trnm, terr := gen.ConditionTrnm(api)
+			if terr != nil {
+				t.Fatalf("%s(%s) trnm: %v", id, menu, terr)
+			}
+			code, err = gen.RenderCondition(gen.Target{
+				Package:  g.Pkg,
+				GoName:   gen.GoName(name),
+				APIID:    id,
+				APIName:  api.Meta["API 명"],
+				MenuPath: menu,
+				Path:     api.Meta["URL"],
+				Request:  reqTree,
+				Response: resTree,
+			}, trnm)
+		default:
+			code, err = gen.Render(gen.Target{
+				Package:  g.Pkg,
+				GoName:   gen.GoName(name),
+				APIID:    id,
+				APIName:  api.Meta["API 명"],
+				MenuPath: menu,
+				Path:     api.Meta["URL"],
+				Request:  reqTree,
+				Response: resTree,
+			})
+		}
 		if err != nil {
 			t.Fatalf("%s 렌더: %v", id, err)
 		}

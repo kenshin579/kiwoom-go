@@ -34,8 +34,9 @@ func TestGroups_필드이름이_유일하다(t *testing.T) {
 		}
 		seen[g.Field] = g.Menu
 	}
-	if len(gen.Groups) != 25 {
-		t.Errorf("카테고리 = %d개, want 25", len(gen.Groups))
+	// 3단계에서 실시간 2 + 조건검색 2 = 4개가 늘어 25 → 29 가 됐다.
+	if len(gen.Groups) != 29 {
+		t.Errorf("카테고리 = %d개, want 29", len(gen.Groups))
 	}
 }
 

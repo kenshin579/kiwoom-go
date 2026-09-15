@@ -2,6 +2,17 @@ package gen
 
 import "strings"
 
+// Kind 는 이 그룹을 어떤 템플릿으로 만드는지다.
+//
+// REST 와 WebSocket 은 전송 계층이 다르다 — 하위 클라이언트가 받는 것도 다르다.
+type Kind string
+
+const (
+	KindREST      Kind = "rest"      // HTTP POST. 요청/응답
+	KindRealtime  Kind = "realtime"  // WebSocket 구독. 채널을 준다
+	KindCondition Kind = "condition" // WebSocket 요청/응답
+)
+
 // Group 은 카테고리 하나의 생성 대상이다.
 type Group struct {
 	Menu   string // 스펙의 "메뉴 위치" 앞 두 단계. 예: "국내주식 > 시세"
@@ -13,7 +24,26 @@ type Group struct {
 	// 따르지 않는다. "DomesticELW"·"DomesticETF" 를 GoName 에 맡기면 "DomesticElw" 가 된다.
 	Field  string
 	Korean string // doc 주석용. 예: "국내주식 시세"
+	Kind   Kind   // 생성 템플릿. 빈 값은 KindREST 로 본다
 }
+
+// Template 은 이 그룹의 Kind 를 돌려준다. 빈 값은 REST 다.
+//
+// 기존 25줄이 위치 기반 리터럴이라 Kind 자리에는 빈 문자열이 들어 있다 —
+// 새 줄만 필드 이름으로 Kind 를 준다.
+func (g Group) Template() Kind {
+	if g.Kind == "" {
+		return KindREST
+	}
+	return g.Kind
+}
+
+// TemplateName 은 같은 값을 string 으로 돌려준다.
+//
+// text/template 의 eq 는 **타입이 다르면 비교하지 못한다** — 템플릿 안의 "rest" 는
+// string 이고 Kind 는 아니라서, .Template 로 비교하면 실행 시점에 터진다.
+// 템플릿에서는 반드시 이쪽을 쓴다.
+func (g Group) TemplateName() string { return string(g.Template()) }
 
 // Groups 는 카테고리 → 패키지 표다.
 //
@@ -23,46 +53,64 @@ type Group struct {
 //
 // 슬라이스로 두는 이유: 생성 순서가 맵 순회에 흔들리지 않아야 한다.
 var Groups = []Group{
-	{"국내주식 > 시세", "domestic", "quote", "DomesticQuote", "국내주식 시세"},
-	{"국내주식 > 차트", "domestic", "chart", "DomesticChart", "국내주식 차트"},
-	{"국내주식 > 종목정보", "domestic", "stock", "DomesticStock", "국내주식 종목정보"},
-	{"국내주식 > 계좌", "domestic", "account", "DomesticAccount", "국내주식 계좌"},
-	{"국내주식 > 순위정보", "domestic", "ranking", "DomesticRanking", "국내주식 순위정보"},
-	{"국내주식 > ELW", "domestic", "elw", "DomesticELW", "국내주식 ELW"},
-	{"국내주식 > ETF", "domestic", "etf", "DomesticETF", "국내주식 ETF"},
-	{"국내주식 > 주문", "domestic", "order", "DomesticOrder", "국내주식 주문"},
-	{"국내주식 > 업종", "domestic", "sector", "DomesticSector", "국내주식 업종"},
-	{"국내주식 > 신용주문", "domestic", "creditorder", "DomesticCreditOrder", "국내주식 신용주문"},
-	{"국내주식 > 대차거래", "domestic", "stocklending", "DomesticStockLending", "국내주식 대차거래"},
-	{"국내주식 > 기관/외국인", "domestic", "investor", "DomesticInvestor", "국내주식 기관/외국인"},
-	{"국내주식 > 테마", "domestic", "theme", "DomesticTheme", "국내주식 테마"},
-	{"국내주식 > 관심종목", "domestic", "watchlist", "DomesticWatchlist", "국내주식 관심종목"},
-	{"국내주식 > 공매도", "domestic", "shortsale", "DomesticShortSale", "국내주식 공매도"},
+	{"국내주식 > 시세", "domestic", "quote", "DomesticQuote", "국내주식 시세", ""},
+	{"국내주식 > 차트", "domestic", "chart", "DomesticChart", "국내주식 차트", ""},
+	{"국내주식 > 종목정보", "domestic", "stock", "DomesticStock", "국내주식 종목정보", ""},
+	{"국내주식 > 계좌", "domestic", "account", "DomesticAccount", "국내주식 계좌", ""},
+	{"국내주식 > 순위정보", "domestic", "ranking", "DomesticRanking", "국내주식 순위정보", ""},
+	{"국내주식 > ELW", "domestic", "elw", "DomesticELW", "국내주식 ELW", ""},
+	{"국내주식 > ETF", "domestic", "etf", "DomesticETF", "국내주식 ETF", ""},
+	{"국내주식 > 주문", "domestic", "order", "DomesticOrder", "국내주식 주문", ""},
+	{"국내주식 > 업종", "domestic", "sector", "DomesticSector", "국내주식 업종", ""},
+	{"국내주식 > 신용주문", "domestic", "creditorder", "DomesticCreditOrder", "국내주식 신용주문", ""},
+	{"국내주식 > 대차거래", "domestic", "stocklending", "DomesticStockLending", "국내주식 대차거래", ""},
+	{"국내주식 > 기관/외국인", "domestic", "investor", "DomesticInvestor", "국내주식 기관/외국인", ""},
+	{"국내주식 > 테마", "domestic", "theme", "DomesticTheme", "국내주식 테마", ""},
+	{"국내주식 > 관심종목", "domestic", "watchlist", "DomesticWatchlist", "국내주식 관심종목", ""},
+	{"국내주식 > 공매도", "domestic", "shortsale", "DomesticShortSale", "국내주식 공매도", ""},
 
-	{"미국주식 > 순위정보", "overseas", "ranking", "OverseasRanking", "미국주식 순위정보"},
-	{"미국주식 > 종목정보", "overseas", "stock", "OverseasStock", "미국주식 종목정보"},
-	{"미국주식 > 계좌", "overseas", "account", "OverseasAccount", "미국주식 계좌"},
-	{"미국주식 > 차트", "overseas", "chart", "OverseasChart", "미국주식 차트"},
-	{"미국주식 > 주문", "overseas", "order", "OverseasOrder", "미국주식 주문"},
-	{"미국주식 > 시세", "overseas", "quote", "OverseasQuote", "미국주식 시세"},
-	{"미국주식 > 환전", "overseas", "exchange", "OverseasExchange", "미국주식 환전"},
-	{"미국주식 > 업종", "overseas", "sector", "OverseasSector", "미국주식 업종"},
-	{"미국주식 > 관심종목", "overseas", "watchlist", "OverseasWatchlist", "미국주식 관심종목"},
-	{"미국주식 > 투자정보", "overseas", "info", "OverseasInfo", "미국주식 투자정보"},
+	{"미국주식 > 순위정보", "overseas", "ranking", "OverseasRanking", "미국주식 순위정보", ""},
+	{"미국주식 > 종목정보", "overseas", "stock", "OverseasStock", "미국주식 종목정보", ""},
+	{"미국주식 > 계좌", "overseas", "account", "OverseasAccount", "미국주식 계좌", ""},
+	{"미국주식 > 차트", "overseas", "chart", "OverseasChart", "미국주식 차트", ""},
+	{"미국주식 > 주문", "overseas", "order", "OverseasOrder", "미국주식 주문", ""},
+	{"미국주식 > 시세", "overseas", "quote", "OverseasQuote", "미국주식 시세", ""},
+	{"미국주식 > 환전", "overseas", "exchange", "OverseasExchange", "미국주식 환전", ""},
+	{"미국주식 > 업종", "overseas", "sector", "OverseasSector", "미국주식 업종", ""},
+	{"미국주식 > 관심종목", "overseas", "watchlist", "OverseasWatchlist", "미국주식 관심종목", ""},
+	{"미국주식 > 투자정보", "overseas", "info", "OverseasInfo", "미국주식 투자정보", ""},
+
+	// 3단계에서 더한 WebSocket 그룹 넷. 기존 25줄은 위치 기반 리터럴이라 Kind 자리가
+	// 빈 문자열이고, 이 넷만 필드 이름을 써서 Kind 를 준다.
+	{Menu: "국내주식 > 실시간시세", Market: "domestic", Pkg: "realtime", Field: "DomesticRealtime", Korean: "국내주식 실시간시세", Kind: KindRealtime},
+	{Menu: "국내주식 > 조건검색", Market: "domestic", Pkg: "condition", Field: "DomesticCondition", Korean: "국내주식 조건검색", Kind: KindCondition},
+	{Menu: "미국주식 > 실시간시세", Market: "overseas", Pkg: "realtime", Field: "OverseasRealtime", Korean: "미국주식 실시간시세", Kind: KindRealtime},
+	{Menu: "미국주식 > 조건검색", Market: "overseas", Pkg: "condition", Field: "OverseasCondition", Korean: "미국주식 조건검색", Kind: KindCondition},
 }
 
 // skipped 는 **일부러** 생성하지 않는 카테고리다.
 //
-// 실시간·조건검색은 WebSocket 이라 프로토콜이 다르고(3단계), OAuth 는 internal/auth 가
-// 손으로 다룬다. 여기 적어 두는 이유는 Groups 에 없는 카테고리를 전부 에러로 잡기 위해서다 —
-// 그래야 새 카테고리가 조용히 빠지지 않는다.
+// OAuth 는 internal/auth 가 손으로 다룬다. 여기 적어 두는 이유는 Groups 에 없는
+// 카테고리를 전부 에러로 잡기 위해서다 — 그래야 새 카테고리가 조용히 빠지지 않는다.
 var skipped = map[string]bool{
-	"국내주식 > 실시간시세":      true,
-	"미국주식 > 실시간시세":      true,
-	"국내주식 > 조건검색":       true,
-	"미국주식 > 조건검색":       true,
 	"OAuth 인증 > 접근토큰발급": true,
 	"OAuth 인증 > 접근토큰폐기": true,
+}
+
+// handWritten 은 생성하지 않고 손으로 쓰는 API 다. 둘을 빼는 이유가 서로 다르다.
+//
+// ka10173 은 응답이 두 벌이다(조회 결과 + REAL 푸시). 스펙에서도 이것만 is_section 으로
+// 본문이 갈라져 BuildTree 가 에러를 낸다. 337개 중 하나를 위해 생성기에 분기를 넣는 것보다,
+// 하나를 손으로 쓰고 생성기를 단순하게 두는 편이 낫다.
+//
+// usa20290 은 다르다 — BuildTree 는 통과한다. 조회 응답 한 벌뿐이고 is_section 도 없다.
+// 빼는 이유는 푸시가 실제로 오는데 **스펙의 필드 표(response.body)에 그 절이 없어서**다.
+// 푸시의 FID 다섯은 response_example 에만 있다(SOURCE.md 의 WebSocket 규약 절 참고) —
+// 생성기는 필드 표만 읽으므로 여기서 나올 것이 없다. 예제를 파싱하는 분기를 337개 중
+// 하나를 위해 넣는 것보다 손으로 쓰는 편이 낫다.
+var handWritten = map[string]bool{
+	"ka10173":  true,
+	"usa20290": true,
 }
 
 // menuKey 는 "국내주식 > 시세 > 주식호가요청(ka10004)" 에서 앞 두 단계만 뗀다.
@@ -87,3 +135,8 @@ func Lookup(menu string) (Group, bool) {
 
 // Skipped 는 일부러 생성하지 않는 카테고리인지 알려준다.
 func Skipped(menu string) bool { return skipped[menuKey(menu)] }
+
+// HandWritten 은 생성 대상에서 빼고 손으로 쓰는 API 인지 알려준다.
+//
+// **BuildTree 보다 먼저 물어야 한다** — ka10173 은 트리를 접다가 에러를 내기 때문이다.
+func HandWritten(apiID string) bool { return handWritten[apiID] }

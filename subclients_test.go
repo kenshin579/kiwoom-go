@@ -33,7 +33,8 @@ func TestNewClient_모든_하위_클라이언트가_배선된다(t *testing.T) {
 // 그룹을 의도적으로 더하거나 뺐다면 이 숫자를 함께 고쳐라 — 고치는 행위 자체가
 // "정말 뺄 생각이었나" 를 한 번 묻는다.
 func TestClients_그룹_개수(t *testing.T) {
-	const want = 25
+	// 3단계에서 실시간 2 + 조건검색 2 = 4개가 늘어 25 → 29 가 됐다.
+	const want = 29
 	if got := reflect.TypeOf(kiwoom.Clients{}).NumField(); got != want {
 		t.Errorf("하위 클라이언트 %d개, 기대 %d개", got, want)
 	}

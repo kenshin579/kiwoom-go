@@ -33,28 +33,67 @@ func Render(t Target) ([]byte, error) {
 	return src, nil
 }
 
+// fieldNamer 는 스펙의 element 를 Go 필드 이름으로 옮긴다.
+//
+// REST 는 element 가 snake_case 라 GoName 하나로 끝나지만, 조건검색 결과 행은 element 가
+// FID 숫자다 — 그쪽은 표를 거쳐야 한다. 갈래를 여기 하나로 모은다.
+type fieldNamer func(element, korean string) (string, error)
+
+// goNamer 는 REST 갈래다. snake_case 를 그대로 옮긴다.
+func goNamer(element, _ string) (string, error) { return GoName(element), nil }
+
+// fidNamer 는 조건검색 갈래다. 숫자 element 를 FID 표로 옮기고, 표에 없으면 멈춘다.
+//
+// 멈추는 이유는 RealtimeFields 와 같다 — 표를 거치지 않으면 "N9001" 같은 이름이 공개
+// 라이브러리 표면으로 새어 나간다(설계 §6).
+func fidNamer(element, korean string) (string, error) {
+	if !isDigitString(element) {
+		return GoName(element), nil
+	}
+	f, ok := LookupFid(element)
+	if !ok {
+		return "", fmt.Errorf("표에 없는 FID: %q(%s). tools/gen/fids.go 에 넣어라", element, korean)
+	}
+	return f.Name, nil
+}
+
 // structs 는 노드 목록을 [구조체 본문, LIST 가 만드는 추가 구조체들] 로 펼친다.
 //
 // 슬라이스로 돌려주는 이유: text/template 의 FuncMap 은 다중 반환을 받지 못한다.
-// 템플릿에서 `index $x 0` / `index $x 1` 로 꺼낸다.
-func structs(prefix string, ns []Node) []string {
+// 템플릿에서 `index $x 0` / `index $x 1` 로 꺼낸다. (error 는 예외 — 템플릿이 알아본다.)
+func structs(prefix string, ns []Node) ([]string, error) {
+	return structsWith(prefix, ns, goNamer)
+}
+
+// condStructs 는 structs 와 같되 FID 표를 거친다. 조건검색 템플릿이 쓴다.
+func condStructs(prefix string, ns []Node) ([]string, error) {
+	return structsWith(prefix, ns, fidNamer)
+}
+
+func structsWith(prefix string, ns []Node, namer fieldNamer) ([]string, error) {
 	var b, x strings.Builder
 	for _, n := range ns {
-		name := GoName(n.Element)
+		name, err := namer(n.Element, n.Korean)
+		if err != nil {
+			return nil, err
+		}
 		if c := comment(n); c != "" {
 			fmt.Fprintf(&b, "\t// %s\n", c)
 		}
 		if n.IsList {
 			item := prefix + name + "Item"
 			fmt.Fprintf(&b, "\t%s []%s `json:%q`\n", name, item, n.Element)
-			inner := structs(item, n.Children)
+			inner, err := structsWith(item, n.Children, namer)
+			if err != nil {
+				return nil, err
+			}
 			fmt.Fprintf(&x, "\n// %s 는 %s 의 원소다.\ntype %s struct {\n%s}\n", item, name, item, inner[0])
 			x.WriteString(inner[1])
 			continue
 		}
 		fmt.Fprintf(&b, "\t%s string `json:%q`\n", name, n.Element)
 	}
-	return []string{b.String(), x.String()}
+	return []string{b.String(), x.String()}, nil
 }
 
 // comment 는 한글명·필수·길이·설명을 한 줄로 만든다.

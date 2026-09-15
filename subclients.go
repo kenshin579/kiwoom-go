@@ -5,6 +5,7 @@ package kiwoom
 import (
 	domesticaccount "github.com/kenshin579/kiwoom-go/domestic/account"
 	domesticchart "github.com/kenshin579/kiwoom-go/domestic/chart"
+	domesticcondition "github.com/kenshin579/kiwoom-go/domestic/condition"
 	domesticcreditorder "github.com/kenshin579/kiwoom-go/domestic/creditorder"
 	domesticelw "github.com/kenshin579/kiwoom-go/domestic/elw"
 	domesticetf "github.com/kenshin579/kiwoom-go/domestic/etf"
@@ -12,6 +13,7 @@ import (
 	domesticorder "github.com/kenshin579/kiwoom-go/domestic/order"
 	domesticquote "github.com/kenshin579/kiwoom-go/domestic/quote"
 	domesticranking "github.com/kenshin579/kiwoom-go/domestic/ranking"
+	domesticrealtime "github.com/kenshin579/kiwoom-go/domestic/realtime"
 	domesticsector "github.com/kenshin579/kiwoom-go/domestic/sector"
 	domesticshortsale "github.com/kenshin579/kiwoom-go/domestic/shortsale"
 	domesticstock "github.com/kenshin579/kiwoom-go/domestic/stock"
@@ -19,13 +21,16 @@ import (
 	domestictheme "github.com/kenshin579/kiwoom-go/domestic/theme"
 	domesticwatchlist "github.com/kenshin579/kiwoom-go/domestic/watchlist"
 	"github.com/kenshin579/kiwoom-go/internal/transport"
+	"github.com/kenshin579/kiwoom-go/internal/wstransport"
 	overseasaccount "github.com/kenshin579/kiwoom-go/overseas/account"
 	overseaschart "github.com/kenshin579/kiwoom-go/overseas/chart"
+	overseascondition "github.com/kenshin579/kiwoom-go/overseas/condition"
 	overseasexchange "github.com/kenshin579/kiwoom-go/overseas/exchange"
 	overseasinfo "github.com/kenshin579/kiwoom-go/overseas/info"
 	overseasorder "github.com/kenshin579/kiwoom-go/overseas/order"
 	overseasquote "github.com/kenshin579/kiwoom-go/overseas/quote"
 	overseasranking "github.com/kenshin579/kiwoom-go/overseas/ranking"
+	overseasrealtime "github.com/kenshin579/kiwoom-go/overseas/realtime"
 	overseassector "github.com/kenshin579/kiwoom-go/overseas/sector"
 	overseasstock "github.com/kenshin579/kiwoom-go/overseas/stock"
 	overseaswatchlist "github.com/kenshin579/kiwoom-go/overseas/watchlist"
@@ -84,10 +89,21 @@ type Clients struct {
 	OverseasWatchlist *overseaswatchlist.Client
 	// OverseasInfo 는 미국주식 투자정보.
 	OverseasInfo *overseasinfo.Client
+	// DomesticRealtime 는 국내주식 실시간시세.
+	DomesticRealtime *domesticrealtime.Client
+	// DomesticCondition 는 국내주식 조건검색.
+	DomesticCondition *domesticcondition.Client
+	// OverseasRealtime 는 미국주식 실시간시세.
+	OverseasRealtime *overseasrealtime.Client
+	// OverseasCondition 는 미국주식 조건검색.
+	OverseasCondition *overseascondition.Client
 }
 
 // newClients 는 NewClient 가 호출한다.
-func newClients(tr *transport.Client) Clients {
+//
+// tr 은 HTTP 전송, dom·ovs 는 시장별 WebSocket 연결이다 — 그룹의 Kind 가 어느 것을
+// 받을지 정한다.
+func newClients(tr *transport.Client, dom, ovs *wstransport.Conn) Clients {
 	return Clients{
 		DomesticQuote:        domesticquote.New(tr),
 		DomesticChart:        domesticchart.New(tr),
@@ -114,5 +130,9 @@ func newClients(tr *transport.Client) Clients {
 		OverseasSector:       overseassector.New(tr),
 		OverseasWatchlist:    overseaswatchlist.New(tr),
 		OverseasInfo:         overseasinfo.New(tr),
+		DomesticRealtime:     domesticrealtime.New(dom),
+		DomesticCondition:    domesticcondition.New(dom),
+		OverseasRealtime:     overseasrealtime.New(ovs),
+		OverseasCondition:    overseascondition.New(ovs),
 	}
 }
