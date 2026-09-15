@@ -34,6 +34,18 @@ c, err := kiwoom.NewClient(appKey, secretKey)               // 운영
 c, err := kiwoom.NewClient(appKey, secretKey, kiwoom.WithMock()) // 모의투자
 ```
 
+**IP 를 등록해야 한다.** 키움은 지정단말기 인증을 쓴다 — 등록되지 않은 곳에서 부르면
+토큰 발급부터 막힌다:
+
+```
+HTTP 200  return_code=3
+return_msg="인증에 실패했습니다[8050:지정단말기 인증에 실패했습니다]"
+```
+
+등록할 것은 **나가는 공인 IP** 다(`curl https://api.ipify.org` 로 확인).
+사설 IP(`192.168.x.x`)를 등록하면 안 된다. 가정용 회선은 공인 IP 가 바뀔 수 있으므로,
+잘 되던 것이 갑자기 `8050` 으로 바뀌면 IP 변경을 먼저 의심하라.
+
 `WithMock()` 은 REST 와 WebSocket 도메인을 **함께** 바꾼다. 하나만 바뀌면 사용자가 모의투자로
 믿는 채로 실서버에 붙기 때문이다. 둘을 따로 가리켜야 하면 `WithBaseURL`(REST) ·
 `WithWSBaseURL`(WebSocket) 을 쓴다.
