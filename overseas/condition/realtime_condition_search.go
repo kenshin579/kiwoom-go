@@ -5,12 +5,9 @@
 // 헤더가 붙었다"(orphan)로 터진다. 헤더가 없으면 둘 다 이 파일을 건드리지 않는다.
 //
 // usa20290 을 빼는 이유는 국내 짝(ka10173)과 **다르다.** 이쪽은 스펙이 갈라지지 않아
-// 생성기의 BuildTree 를 통과한다. 문제는 푸시 쪽이다 — 푸시는 실제로 오는데(공식 예제가
-// 실시간을 모은다) 스펙에 그 FID 표가 통째로 비어 있다. 예제도 COLUMNS = {} 에 "수동
-// 생성 필요" 마커를 달아 두었다(tools/spec/SOURCE.md 참고).
-//
-// 그래서 조회 응답에는 타입을 붙이고, 푸시는 Raw 맵으로만 낸다. FID 이름을 지어내지
-// 않는다 — 스펙에 없는 것을 있는 것처럼 만들지 않는다.
+// 생성기의 BuildTree 를 통과한다 — 응답 절이 조회 한 벌이라 푸시를 생성할 재료가 없다.
+// 그 재료는 필드 표가 아니라 **응답 예제**에 있다(아래 OverseasRealtimeConditionMatch
+// 주석 참고). 예제를 읽어 손으로 쓰는 것이 생성기에 예제 파서를 넣는 것보다 낫다.
 
 package condition
 
@@ -18,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/kenshin579/kiwoom-go/internal/wstransport"
 	"github.com/kenshin579/kiwoom-go/stream"
 )
 
@@ -63,6 +61,8 @@ type RequestOverseasRealtimeConditionSearchDataItem struct {
 // 반대쪽이 올 때 필드가 조용히 빈 채로 남는다 — 어느 쪽이 맞는지 문서가 스스로 어긋나
 // 있으니, 고르지 않고 둘 다 받는다.
 func (it *RequestOverseasRealtimeConditionSearchDataItem) UnmarshalJSON(b []byte) error {
+	// 그림자 구조체다. 위 구조체에 필드를 더하면 **여기에도 더해야 한다** — 빠뜨리면
+	// 그 필드는 이 UnmarshalJSON 을 타고 조용히 빈 채로 남는다.
 	var raw struct {
 		Jmcode string `json:"jmcode"`
 		Snake  string `json:"stex_tp"`
@@ -79,27 +79,47 @@ func (it *RequestOverseasRealtimeConditionSearchDataItem) UnmarshalJSON(b []byte
 	return nil
 }
 
-// OverseasRealtimeConditionMatch 는 미국 조건검색 푸시의 값 타입이다. **늘 비어 있다.**
+// OverseasRealtimeConditionMatch 는 미국 조건검색 편입·이탈 푸시 한 건이다.
 //
-// 337개 중 이것 하나만 이렇다. "푸시를 지원하지 않는다" 가 아니라 **"이름표가 없다"** 가
-// 사실이고, 둘은 다르다 — 푸시는 실제로 오고 stream.Event.Raw 에 받은 FID 가 전부 들어
-// 있다. 다만 스펙에 그 FID 들의 한글명 표가 통째로 비어 있어(공식 예제도 COLUMNS = {})
-// 어느 숫자가 무엇인지 문서가 말해 주지 않는다. 그래서 Go 필드 이름을 지어내지 않는다.
+// **비어 있는 것은 필드 표이지 스펙이 아니다.** 한동안 이 타입은 빈 구조체였고 주석에
+// "이름표가 없다" 고 적혀 있었는데, 그 전제가 틀렸다. `response.body` 에 푸시 절이 없는
+// 것은 사실이지만 같은 API 의 `response_example` 에 푸시가 그대로 실려 있다:
 //
-// 값을 읽으려면 Raw 를 쓰라. 예: ev.Raw["9001"].
+//	"values": {"20":"230156","841":"2","843":"I","907":"2","9001":"COIN"},
+//	"type": "S2", "name": "조건검색", "item": "COIN", "stexTp": "ND"
 //
-// 빈 구조체를 익명 struct{} 대신 이름 붙여 두는 이유는 나중을 위해서다 — 키움이 표를
-// 채우면 여기에 필드를 더하기만 하면 되고, 메서드 서명은 그대로다. stream.Event[struct{}]
-// 로 냈다면 그때 서명이 바뀌어 쓰던 코드가 깨진다.
-type OverseasRealtimeConditionMatch struct{}
+// **국내 짝(ka10173)과 똑같은 다섯 FID** 이고, 다섯 개 전부 tools/gen/fids.go 의 표에
+// 이름이 있다. 그래서 여기 적힌 이름은 지어낸 것이 아니라 **이미 가진 이름을 쓴 것**이다 —
+// 글자까지 국내 DomesticRealtimeConditionMatch 와 같다. 같은 FID 는 어디서나 같은 낱말이다.
+//
+// 표가 비었을 때 예제를 따르는 것은 이 저장소의 선례다. tools/spec/SOURCE.md 의
+// "스펙과 어긋나는 곳(이 표가 이긴다)" 이 이미 세 번 같은 판단을 했다(REG 의 item·type 이
+// 배열, values 가 맵, trnm 이 GCNSRREQ). 여기만 표의 침묵을 따를 이유가 없다.
+//
+// 푸시 봉투의 stexTp(거래소구분)는 values 밖에 붙어 이 구조체가 아니라 stream.Event.StexTp
+// 로 온다.
+type OverseasRealtimeConditionMatch struct {
+	// 일련번호 (요청한 조건검색식의 seq 가 그대로 온다)
+	SequenceNumber string `json:"841"`
+	// 종목코드
+	StockOrSectorCode string `json:"9001"`
+	// 삽입삭제 구분 (I: 삽입, D: 삭제)
+	InsertDeleteType string `json:"843"`
+	// 체결시간
+	TradeTime string `json:"20"`
+	// 매도/수 구분
+	TradeSide string `json:"907"`
+}
 
 // RequestOverseasRealtimeConditionSearch 는 미국주식 조건검색 요청 실시간(usa20290) 이다.
 // WebSocket 위의 요청/응답이고, 그 뒤로 편입·이탈 푸시가 이어진다.
 //
-// 조회 응답은 타입이 붙지만 **푸시는 Raw 맵뿐이다** — 스펙에 FID 이름표가 없다
-// (OverseasRealtimeConditionMatch 주석 참고). ev.Value 는 늘 영값이고, 받은 FID 는
-// 전부 ev.Raw 에 있다. 푸시 원소에 붙는 stexTp 는 실시간 봉투가 싣지 않는다 —
-// 그 자리는 values 안이 아니라 밖이고, 실시간 23종 어디에도 없는 필드다.
+// 조회 응답과 푸시 **둘 다 타입이 붙는다** — 국내 짝(ka10173)과 대칭이다. 푸시 FID 는
+// 스펙의 필드 표에는 없지만 응답 예제에 그대로 있고, 다섯 개 전부 국내와 같은 FID 다
+// (OverseasRealtimeConditionMatch 주석 참고). 받은 FID 는 ev.Raw 에도 전부 남는다.
+//
+// 푸시 봉투에 붙는 stexTp(거래소구분)는 values 밖에 있어 ev.Value 가 아니라
+// **ev.StexTp** 로 온다. 실시간 23종에는 없는 필드라 그쪽에서는 늘 빈 문자열이다.
 //
 // 푸시는 종목별 등록(REG)이 아니라 **이 요청 자체가 등록**이라, 채널은 조건검색식
 // 일련번호(req.Seq)로 갈린다.
@@ -147,19 +167,31 @@ func (c *Client) RequestOverseasRealtimeConditionSearch(
 	go func() {
 		defer close(ch)
 		for d := range src {
-			ev := stream.Event[OverseasRealtimeConditionMatch]{
-				Symbol: d.Item, Name: d.Name, Time: d.Time, Err: d.Err,
-			}
-			// 한 번만 푼다. 국내 짝은 구조체와 Raw 를 함께 채우지만 여기는 채울 구조체가
-			// 없다 — 이름표가 없으니 Raw 가 전부다.
-			if d.Err == nil {
-				if err := json.Unmarshal(d.Values, &ev.Raw); err != nil {
-					ev.Err = err
-				}
-			}
-			ch <- ev
+			ch <- decodeOverseasRealtimeConditionMatch(d)
 		}
 	}()
 	handedOff = true
 	return &out, ch, nil
+}
+
+func decodeOverseasRealtimeConditionMatch(d wstransport.Delivery) stream.Event[OverseasRealtimeConditionMatch] {
+	// 봉투는 봉투째 옮긴다. StexTp 는 values 밖에 붙는 필드라 아래 두 번의 Unmarshal
+	// 어느 쪽으로도 채워지지 않는다 — 여기서 옮기지 않으면 어떤 경로로도 얻을 수 없다.
+	ev := stream.Event[OverseasRealtimeConditionMatch]{
+		Symbol: d.Item, Name: d.Name, StexTp: d.StexTp, Time: d.Time, Err: d.Err,
+	}
+	if d.Err != nil {
+		return ev
+	}
+	// 두 번 푼다. 구조체는 표에 있는 FID 만 받고, Raw 는 전부 받는다 —
+	// 키움이 FID 를 추가했을 때 encoding/json 이 조용히 버리지 않게 한다.
+	// (국내 짝·생성된 실시간 23종과 같은 코드다.)
+	if err := json.Unmarshal(d.Values, &ev.Value); err != nil {
+		ev.Err = err
+		return ev
+	}
+	if err := json.Unmarshal(d.Values, &ev.Raw); err != nil {
+		ev.Err = err
+	}
+	return ev
 }

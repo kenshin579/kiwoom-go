@@ -104,7 +104,7 @@ cat tools/spec/SOURCE.md
 | 인증 실패 시 토큰 재발급 후 **로그인만** 재시도 | 같은 파일 `connect(retry_on_auth_failure=True)` |
 | REG 패킷의 `item`·`type` 이 **배열** | `examples/국내주식/실시간시세/subscribe_domestic_stock_trade_async.py` |
 | REAL 푸시의 `item` 은 **스칼라**, `values` 는 **맵** | `kiwoom/realtime/decoders.py` 머리말 |
-| `usa20290` 은 푸시가 오지만 FID 표가 비어 있음(`COLUMNS = {}`) | `examples/미국주식/조건검색/request_overseas_realtime_condition_search_async.py` |
+| `usa20290` 은 푸시가 오지만 **필드 표**가 비어 있음 (푸시 FID 는 `response_example` 에 있다 — 2026-09-15 정정, 설계 §8 참고) | `examples/미국주식/조건검색/request_overseas_realtime_condition_search_async.py` · `kiwoom_api_spec.json` |
 | 미국 조건검색 `trnm` 은 `GCNSRREQ` | 같은 파일 |
 
 스펙과 **어긋나는** 곳(이 표가 이긴다):
@@ -2790,6 +2790,12 @@ func fieldOf(values json.RawMessage, fid string) string {
 ```
 
 - [ ] **Step 3: 미국(`usa20290`)을 쓴다**
+
+> **2026-09-15 정정.** 아래 코드 스케치의 전제 — "스펙에 푸시 필드가 하나도 없다" — 는
+> 틀렸다. 비어 있는 것은 필드 표(`response.body`)이고 `response_example` 에 푸시 FID 다섯이
+> 그대로 있다(`20`·`841`·`843`·`907`·`9001`, `ka10173` 과 동일). 실제 구현은 국내 짝과
+> 대칭으로 값 구조체를 채우고, 봉투의 `stexTp` 는 `stream.Event.StexTp` 로 낸다.
+> 설계 §8 과 `tools/spec/SOURCE.md` 참고.
 
 `overseas/condition/realtime_condition_search.go`:
 

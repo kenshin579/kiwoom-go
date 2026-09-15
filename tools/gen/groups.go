@@ -104,9 +104,10 @@ var skipped = map[string]bool{
 // 하나를 손으로 쓰고 생성기를 단순하게 두는 편이 낫다.
 //
 // usa20290 은 다르다 — BuildTree 는 통과한다. 조회 응답 한 벌뿐이고 is_section 도 없다.
-// 빼는 이유는 푸시가 실제로 오는데 그 FID 표가 스펙에 통째로 비어 있어서다
-// (공식 예제도 COLUMNS = {} 로 둔다. SOURCE.md 의 WebSocket 규약 절 참고).
-// 조회는 타입을 붙이고 푸시는 Raw 맵으로만 내야 하므로 역시 손으로 쓴다.
+// 빼는 이유는 푸시가 실제로 오는데 **스펙의 필드 표(response.body)에 그 절이 없어서**다.
+// 푸시의 FID 다섯은 response_example 에만 있다(SOURCE.md 의 WebSocket 규약 절 참고) —
+// 생성기는 필드 표만 읽으므로 여기서 나올 것이 없다. 예제를 파싱하는 분기를 337개 중
+// 하나를 위해 넣는 것보다 손으로 쓰는 편이 낫다.
 var handWritten = map[string]bool{
 	"ka10173":  true,
 	"usa20290": true,

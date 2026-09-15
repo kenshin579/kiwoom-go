@@ -57,7 +57,9 @@ func (c *Client) SubscribeDomesticStockInfo(ctx context.Context, items ...string
 }
 
 func decodeDomesticStockInfo(d wstransport.Delivery) stream.Event[DomesticStockInfo] {
-	ev := stream.Event[DomesticStockInfo]{Symbol: d.Item, Name: d.Name, Time: d.Time, Err: d.Err}
+	// 봉투는 봉투째 옮긴다. StexTp 는 실시간 23종에는 없어 늘 빈 문자열이지만, 한 곳에서만
+	// 옮기고 다른 곳에서 빠뜨리면 키움이 이 필드를 더하는 날 조용히 사라진다.
+	ev := stream.Event[DomesticStockInfo]{Symbol: d.Item, Name: d.Name, StexTp: d.StexTp, Time: d.Time, Err: d.Err}
 	if d.Err != nil {
 		return ev
 	}

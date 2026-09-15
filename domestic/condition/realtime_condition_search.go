@@ -139,7 +139,11 @@ func (c *Client) RequestDomesticRealtimeConditionSearch(
 }
 
 func decodeDomesticRealtimeConditionMatch(d wstransport.Delivery) stream.Event[DomesticRealtimeConditionMatch] {
-	ev := stream.Event[DomesticRealtimeConditionMatch]{Symbol: d.Item, Name: d.Name, Time: d.Time, Err: d.Err}
+	// 봉투는 봉투째 옮긴다(생성된 실시간 decode 와 같은 규칙). StexTp 는 국내 푸시에
+	// 없어 늘 빈 문자열이지만, 한 곳에서만 옮기면 다른 곳에서 조용히 사라진다.
+	ev := stream.Event[DomesticRealtimeConditionMatch]{
+		Symbol: d.Item, Name: d.Name, StexTp: d.StexTp, Time: d.Time, Err: d.Err,
+	}
 	if d.Err != nil {
 		return ev
 	}

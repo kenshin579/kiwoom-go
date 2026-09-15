@@ -84,7 +84,7 @@ func usCondFakeWS(t *testing.T) string {
 	return strings.Replace(srv.URL, "http://", "ws://", 1)
 }
 
-// 조회 응답은 타입이 붙고 푸시는 Raw 맵으로만 온다 — 이 API 하나만 그렇다.
+// 조회 응답과 푸시 **둘 다 타입이 붙는다** — 국내 짝(ka10173)과 대칭이다.
 func TestRequestOverseasRealtimeConditionSearch_조회응답과_푸시를_모두_받는다(t *testing.T) {
 	c := New(wstransport.New(usCondFakeWS(t), "", usCondStubToken{}))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -110,11 +110,28 @@ func TestRequestOverseasRealtimeConditionSearch_조회응답과_푸시를_모두
 		if ev.Symbol != "COIN" {
 			t.Errorf("Symbol = %q, 기대 COIN", ev.Symbol)
 		}
-		// 값 구조체는 늘 비어 있다. 이름표가 없어서지 푸시가 없어서가 아니다.
-		if ev.Value != (OverseasRealtimeConditionMatch{}) {
-			t.Errorf("Value = %+v, 기대 영값", ev.Value)
+		// **Important 3 의 자리다.** 값 구조체가 채워져야 한다.
+		//
+		// 한동안 이 타입은 빈 구조체였다. "스펙에 FID 이름표가 없다" 는 전제였는데, 비어
+		// 있는 것은 필드 표이고 response_example 에는 다섯 FID 가 그대로 있었다 —
+		// 국내 짝과 같은 다섯이고 전부 tools/gen/fids.go 의 표에 이름이 있다.
+		want := OverseasRealtimeConditionMatch{
+			SequenceNumber:    "2",
+			StockOrSectorCode: "COIN",
+			InsertDeleteType:  "I",
+			TradeTime:         "230156",
+			TradeSide:         "2",
 		}
-		// 받은 FID 는 Raw 에 전부 있어야 한다. 여기가 비면 이 API 는 쓸모가 없다.
+		if ev.Value != want {
+			t.Errorf("Value = %+v, 기대 %+v", ev.Value, want)
+		}
+		// **Important 4 의 자리다.** 푸시 봉투의 stexTp 는 values 밖에 붙는다 —
+		// 여기가 비면 미국 종목의 거래소 구분을 어떤 경로로도 얻을 수 없다.
+		if ev.StexTp != "ND" {
+			t.Errorf("StexTp = %q, 기대 ND — 푸시 봉투의 거래소구분이 사라졌다", ev.StexTp)
+		}
+		// 받은 FID 는 Raw 에도 전부 있어야 한다. 키움이 FID 를 더했을 때 조용히 버리지
+		// 않게 하는 자리다.
 		for fid, want := range map[string]string{
 			"841": "2", "9001": "COIN", "843": "I", "20": "230156", "907": "2",
 		} {

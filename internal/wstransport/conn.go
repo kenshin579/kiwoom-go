@@ -266,12 +266,28 @@ func (c *Conn) connectOnce(ctx context.Context) error {
 	return nil
 }
 
-// lifeCtx 는 연결의 수명 컨텍스트다.
+// lifeCtx 는 연결의 수명 컨텍스트다. 아직 없으면 **여기서 만든다.**
+//
+// 예전에는 없을 때 context.Background() 를 돌려줬다. 그것은 영영 끝나지 않는 컨텍스트라,
+// 아직 다이얼하지 않은 연결에 붙은 정리 고루틴이 그것을 잡으면 Close 가 c.life 를 끊어도
+// 깨어나지 않았다 — 채널이 닫히지 않아 for range 소비자가 영원히 막히고, 고루틴과
+// 구독 자리가 샜다. SubscribeCondition 이 정확히 그 경로였다(ensureConnected 를 부르지
+// 않고 수명만 잡는다). 손으로 쓴 조건검색 두 파일은 첫 푸시를 잃지 않으려고 요청보다
+// **먼저** 구독하므로, 갓 만든 Client 의 첫 호출에서는 연결이 아직 없다.
+//
+// 게으르게 만드는 것으로 고친다. 여기서 다이얼하지는 않는다 — 그 결정은 그대로다.
+// Connect 도 같은 `if c.life == nil` 가드를 쓰고, c.life 는 재연결에도 다시 만들지 않으므로
+// 누가 먼저 만들든 결과는 하나다.
 func (c *Conn) lifeCtx() context.Context {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.life == nil {
-		return context.Background()
+		c.life, c.stop = context.WithCancel(context.Background())
+		if c.closed {
+			// Close 가 이미 지나갔다. 방금 만든 수명은 그 Close 를 놓친 것이니 바로 끊는다 —
+			// 그러지 않으면 닫힌 연결에 붙은 구독이 영영 닫히지 않는 채널을 준다.
+			c.stop()
+		}
 	}
 	return c.life
 }

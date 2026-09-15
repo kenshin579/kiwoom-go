@@ -12,6 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/kenshin579/kiwoom-go"
+	domcond "github.com/kenshin579/kiwoom-go/domestic/condition"
 )
 
 // 루트에서 실제로 붙는지, 그리고 붙은 뒤에 Close·BadFrames 가 닿는지를 한 번에 본다.
@@ -197,4 +198,120 @@ func newRealtimeServer(t *testing.T) *realtimeServer {
 	t.Cleanup(srv.Close)
 	s.url = strings.Replace(srv.URL, "http://", "ws://", 1)
 	return s
+}
+
+// **Critical 1 을 공개 API 로 재현한다.** 검토자가 걸어 본 바로 그 경로다.
+//
+// 조건검색 메서드는 첫 푸시를 잃지 않으려고 요청보다 **먼저** 구독한다. 그래서 갓 만든
+// Client 의 첫 호출에서는 아직 소켓이 없고, 예전에는 그 순간 정리 고루틴이 영영 끝나지
+// 않는 context.Background() 를 붙잡았다 — Close 를 불러도 채널이 닫히지 않아 이 테스트의
+// for range 가 영원히 끝나지 않는다.
+//
+// ctx 는 취소하지 않는다. 채널을 닫을 수 있는 것이 Close 하나여야 이 테스트가 의미를 갖는다.
+func TestClient_조건검색_구독은_Close_로_닫힌다(t *testing.T) {
+	tokenSrv := newTokenServer(t)
+	ws := newConditionServer(t)
+
+	c, err := kiwoom.NewClient("AK", "SK",
+		kiwoom.WithBaseURL(tokenSrv.URL),
+		kiwoom.WithWSBaseURL(ws),
+	)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	res, ch, err := c.DomesticCondition.RequestDomesticRealtimeConditionSearch(
+		context.Background(),
+		domcond.RequestDomesticRealtimeConditionSearchRequest{Seq: "4", SearchType: "1", StexTp: "K"},
+	)
+	if err != nil {
+		t.Fatalf("RequestDomesticRealtimeConditionSearch: %v", err)
+	}
+	if res.Seq != "4" {
+		t.Errorf("응답 Seq = %q, 기대 4", res.Seq)
+	}
+
+	if err := c.Close(); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range ch { // 닫히지 않으면 여기서 영원히 막힌다
+		}
+	}()
+	select {
+	case <-drained:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close 뒤에도 조건검색 채널이 닫히지 않았다 — 소비자가 영원히 막힌다")
+	}
+}
+
+// newConditionServer 는 CNSRREQ 에 조회 응답과 푸시 한 건을 주는 WS 서버다.
+func newConditionServer(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.CloseNow() }()
+
+		writeJSON := func(v any) error {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return c.Write(ctx, websocket.MessageText, b)
+		}
+		read := func() (map[string]any, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, b, err := c.Read(ctx)
+			if err != nil {
+				return nil, err
+			}
+			var m map[string]any
+			_ = json.Unmarshal(b, &m)
+			return m, nil
+		}
+
+		if _, err := read(); err != nil { // LOGIN
+			return
+		}
+		if err := writeJSON(map[string]any{"trnm": "LOGIN", "return_code": 0}); err != nil {
+			return
+		}
+		for {
+			m, err := read()
+			if err != nil {
+				return
+			}
+			if m["trnm"] != "CNSRREQ" {
+				continue
+			}
+			if err := writeJSON(map[string]any{
+				"trnm": "CNSRREQ", "seq": "4", "return_code": 0,
+				"data": []any{map[string]any{"jmcode": "A005930"}},
+			}); err != nil {
+				return
+			}
+			if err := writeJSON(map[string]any{
+				"trnm": "REAL",
+				"data": []any{map[string]any{
+					"type": "02", "name": "조건검색", "item": "005930",
+					"values": map[string]any{
+						"841": "4", "9001": "005930", "843": "I", "20": "152028", "907": "2",
+					},
+				}},
+			}); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return strings.Replace(srv.URL, "http://", "ws://", 1)
 }

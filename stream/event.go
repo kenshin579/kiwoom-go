@@ -18,6 +18,16 @@ import "time"
 type Event[T any] struct {
 	Symbol string // 종목코드
 	Name   string // 실시간 항목명
+	// StexTp 는 거래소구분이다. **미국 조건검색 푸시(usa20290)에만 온다** — 실시간 23종과
+	// 국내 조건검색(ka10173)에는 이 필드가 없어 늘 빈 문자열이다.
+	//
+	// 여기 있는 이유: 이것은 values 안이 아니라 **푸시 봉투**에 붙는 필드다
+	// (`{"type":…,"item":…,"stexTp":"ND","values":{…}}`). Symbol·Name 과 같은 층이라
+	// 같은 자리에 둔다. Raw 에 섞으면 "Raw 의 열쇠는 FID 숫자" 라는 약속이 깨지고,
+	// 값 구조체에 넣으면 "필드 이름은 FID 표에서 온다" 는 약속이 깨진다. 버리면
+	// 미국 종목의 거래소 구분을 어떤 경로로도 얻을 수 없다 — 조회 응답에서는 철자가
+	// 갈리는 것까지 받아 내는 값이다.
+	StexTp string
 	Time   time.Time
 	Value  T
 	Raw    map[string]string // 받은 FID 전부. 표에 없는 것도 여기 남는다

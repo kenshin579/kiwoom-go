@@ -195,24 +195,40 @@ handle(<-ovsCh) // overseas/realtime
   알린다 — 한 구독이 느리다고 다른 구독을 굶기지 않는다. 채널 버퍼는 구독당 256이다.
   밀린 알림이 몰릴 때는 **구멍이 먼저, 느림이 나중에** 간다. 자리가 한 칸뿐일 때 하나만
   통과한다면 무거운 쪽이 통과해야 한다.
+- **조건검색 푸시가 갈 곳을 못 찾으면 `*kiwoom.UnroutedConditionPushError`**
+  (`Type`·`Name`·`Item`·`Seq`). 조건검색 푸시는 `values` 의 `841`(일련번호)로만 갈리는데,
+  그 FID 가 빠졌거나 어느 구독의 것과도 맞지 않으면 이 건은 어디에도 닿지 못한다. 예전에는
+  그냥 버렸다 — 그러면 사용자는 그것을 **"조건에 걸린 종목이 없다" 와 구분할 수 없다.**
+  살아 있는 조건검색 구독 전체에 흘린다(어느 구독의 것이었는지는 알 수 없으므로).
+  `Seq` 가 비어 있으면 `841` 이 아예 없었다는 뜻이다.
 - **해석하지 못한 프레임은 재연결하지 않고 센다.** `c.BadFrames()` 로 읽는다. 깨진 JSON 한
   건으로 재연결해 봐야 되찾는 것이 없고, 서버가 우리가 모르는 메시지를 계속 보내면 재연결
   핫 루프가 된다. 이 수가 0 이 아니고 계속 는다면 조용히 버려지는 실시간이 있다는 뜻이다 —
   "왜 어떤 이벤트는 안 오지?" 를 설명할 수 있는 유일한 자리다.
 
-네 신호 모두 `errors.As` 로 가린다. 타입 별칭이라 `internal/` 을 import 하지 않고도 된다.
+다섯 신호 모두 `errors.As` 로 가린다. 타입 별칭이라 `internal/` 을 import 하지 않고도 된다.
 
 ```go
 var gap *kiwoom.GapError
 var slow *kiwoom.SlowConsumerError
 var rec *kiwoom.ReconnectingError
+var unrouted *kiwoom.UnroutedConditionPushError
 switch {
-case errors.As(ev.Err, &gap):  // 끊겼다 붙었다 — 그 사이를 놓쳤다
-case errors.As(ev.Err, &rec):  // 아직 못 붙었다 — 지금은 아무것도 오지 않는다
-case errors.As(ev.Err, &slow): // 내가 느려서 버려졌다 — 채널을 더 빨리 비워라
-case ev.Err != nil:            // 그 밖의 실패
+case errors.As(ev.Err, &gap): // 끊겼다 붙었다 — 그 사이를 놓쳤다
+	if !gap.Resubscribed {
+		// 조건검색이다. 등록이 죽었으니 요청을 다시 보내야 한다
+	}
+case errors.As(ev.Err, &rec):      // 아직 못 붙었다 — 지금은 아무것도 오지 않는다
+case errors.As(ev.Err, &slow):     // 내가 느려서 버려졌다 — 채널을 더 빨리 비워라
+case errors.As(ev.Err, &unrouted): // 조건검색 푸시가 갈 곳을 못 찾았다
+case ev.Err != nil:                // 그 밖의 실패
 }
 ```
+
+**`GapError` 는 뜻이 둘로 갈린다.** 실시간 구독에서는 다시 붙으면서 등록(REG)이 복구되었다는
+뜻이지만(`Resubscribed == true`), 조건검색에서는 등록이 죽은 채다(`false`) — 요청 자체가
+등록이라 되살릴 REG 가 없다. 같은 타입에 같은 문장으로 내면 `ev.Err != nil` 하나로 처리하는
+핸들러가 둘을 구분하지 못하므로 값에 넣어 갈랐다.
 
 ## 조건검색
 
@@ -264,19 +280,32 @@ _, err = c.DomesticCondition.StopDomesticRealtimeConditionSearch(ctx, /* ... */)
 조건검색은 **요청 자체가 등록**이라 되살릴 REG 가 없다. 그래서 이 채널의 `*GapError` 는
 "그 사이를 놓쳤다" 에 더해 **"지금은 아무것도 오지 않는다"** 는 뜻이다 — 받으면
 `RequestDomesticRealtimeConditionSearch` 를 다시 불러 등록을 새로 세워야 한다.
+그 구분은 값에 있다: 조건검색 채널의 `GapError` 는 `Resubscribed == false` 다.
 
-**미국 조건검색(`usa20290`)의 푸시는 `Raw` 뿐이다.** `ev.Value`(`OverseasRealtimeConditionMatch`)
-는 늘 영값이고 받은 FID 는 전부 `ev.Raw` 에 들어 있다.
+**미국 조건검색(`usa20290`)도 국내와 대칭이다.** 푸시가 `ev.Value`
+(`OverseasRealtimeConditionMatch`)에 그대로 들어온다 — 국내 짝(`ka10173`)과 **같은 다섯 FID**
+이고 Go 필드 이름도 글자까지 같다(`841` `SequenceNumber` · `9001` `StockOrSectorCode` ·
+`843` `InsertDeleteType` · `20` `TradeTime` · `907` `TradeSide`). 받은 FID 는 `ev.Raw` 에도
+그대로 남는다.
 
-**어떤 FID 가 오는지는 이 라이브러리도 모른다.** 국내 짝(`ka10173`)이 보내는 키를 미뤄
-짐작할 수는 있지만 확인된 것이 아니므로 여기에 예시 키를 적지 않는다. 먼저 받은 것을
-그대로 찍어 보고(`for k, v := range ev.Raw`) 무엇이 오는지 눈으로 확인한 뒤 쓰라.
+```go
+res, ch, err := c.OverseasCondition.RequestOverseasRealtimeConditionSearch(ctx, req)
+for ev := range ch {
+    if ev.Err != nil { /* 구멍 신호 */ continue }
+    fmt.Println(ev.Value.StockOrSectorCode, ev.Value.InsertDeleteType, ev.StexTp)
+}
+```
 
-이것은 **"푸시를 지원하지 않는다" 가 아니라 "이름표가 없다"** 다. 푸시는 실제로 오고 값도 다
-들어 있다. 다만 스펙에 그 FID 들의 한글명 표가 통째로 비어 있어(공식 예제도 `COLUMNS = {}` 에
-"수동 생성 필요" 마커를 달아 둔다) 어느 숫자가 무엇인지 문서가 말해 주지 않는다. 그래서 Go
-필드 이름을 지어내지 않았다 — 스펙에 없는 것을 있는 것처럼 만들지 않는다. 337개 중 이 하나만
-이렇다.
+한동안 여기에는 "푸시는 `Raw` 뿐이다", "어떤 FID 가 오는지는 이 라이브러리도 모른다" 고
+적혀 있었다. **둘 다 틀렸다.** 비어 있는 것은 스펙의 **필드 표**(`response.body`)이고, 같은
+문서의 `response_example` 에 푸시가 그대로 실려 있다. 예제가 표를 이기는 것은 이 저장소의
+선례다 — `tools/spec/SOURCE.md` 의 "스펙 표와 어긋나는 곳" 이 이미 세 번 같은 판단을 했고
+(`REG` 의 `item`·`type` 이 배열, `values` 가 맵, `trnm` 이 `GCNSRREQ`) 이것이 네 번째다.
+FID 이름을 지어낸 것이 아니라 `tools/gen/fids.go` 가 **이미 가진 이름**을 쓴 것이다.
+
+**거래소구분은 `ev.StexTp` 로 온다.** 푸시 봉투의 `stexTp` 는 `values` **밖**에 붙어 FID 가
+아니므로, 값 구조체에도 `Raw` 에도 자리가 없다. `Symbol`·`Name` 과 같은 봉투 층에 둔다.
+실시간 23종과 국내 조건검색에는 없는 필드라 그쪽에서는 늘 빈 문자열이다.
 
 ## 문자열 정책
 
@@ -394,7 +423,8 @@ cd tools && go run ./gen/main
 - **손으로 쓴 파일 2개**(`domestic/condition/realtime_condition_search.go` ·
   `overseas/condition/realtime_condition_search.go`)만 예외다. `ka10173` 은 337개 중 유일하게
   응답이 두 벌(조회 + 푸시)이라 스펙 본문이 갈라져 생성기의 트리 빌더가 접지 못하고,
-  `usa20290` 은 푸시 FID 표가 스펙에 비어 있어 푸시를 `Raw` 로만 내야 한다. 둘을 위해 생성기에
+  `usa20290` 은 푸시 FID 가 스펙의 **필드 표가 아니라 응답 예제에** 있어 생성기가 읽을 것이
+  없다. 둘을 위해 생성기에
   분기를 넣는 것보다 둘을 손으로 쓰고 생성기를 단순하게 두는 편이 낫다고 봤다. 두 파일에는
   생성물 헤더를 붙이지 않는다 — 붙이면 다음 생성 때 지워진다.
 - `tools/` 는 별도 Go 모듈이다 — 벤더링한 스펙·생성기가 라이브러리 사용자의 의존성 그래프에

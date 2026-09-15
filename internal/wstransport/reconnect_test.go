@@ -703,7 +703,15 @@ func TestReconnect_로그인이_거부되면_토큰을_버리고_다시_시도�
 //
 // 수명 ctx 는 Close 전에 끝나지 않으므로, 시도마다 시간 제한이 없으면 로그인 응답에
 // 한 번 물리는 순간 영영 멈춘다 — 그 침묵은 아무도 깨우지 못한다.
+//
+// **시간 예산을 넉넉히 잡는다.** 이 테스트가 재는 것은 "이어지는가" 지 "얼마나 빠른가"
+// 가 아니다. 예전에는 3초였는데, 3단계에서 테스트가 늘어 전체 `-race` 실행이 5초에서
+// 12초로 길어지자 그 예산을 넘겨 9회 중 2회 실패했다(패키지 단독으로는 늘 통과했다).
+// 한 시도가 retryDelay(10ms) + connectTimeout(100ms) ≈ 110ms 이므로 4회는 0.5초면
+// 끝난다 — 아래 예산은 그 스무 배다. 이만큼을 넘기면 느린 것이 아니라 멈춘 것이다.
 func TestReconnect_시도_하나가_물려도_멈추지_않는다(t *testing.T) {
+	const budget = 10 * time.Second
+
 	f := newFakeServer(t)
 	srvCh := make(chan *websocket.Conn, 8)
 	f.onConn = func(t *testing.T, n int, ws *websocket.Conn) { srvCh <- ws }
@@ -720,14 +728,14 @@ func TestReconnect_시도_하나가_물려도_멈추지_않는다(t *testing.T) 
 	f.setSilentFrom(2) // 앞으로의 연결은 로그인 응답을 주지 않는다
 	_ = srv.CloseNow()
 
-	if !waitFor(3*time.Second, func() bool { return f.connCount() >= 4 }) {
+	if !waitFor(budget, func() bool { return f.connCount() >= 4 }) {
 		t.Fatalf("연결 시도 = %d, 기대 4회 이상 — 물린 시도에서 재연결이 멈췄다", f.connCount())
 	}
 
 	// 서버가 다시 답하면 붙는다.
 	f.setSilentFrom(0)
 	before := f.connCount()
-	if !waitFor(5*time.Second, func() bool { return len(regItems(f.packets())) >= 0 && f.connCount() > before }) {
+	if !waitFor(budget, func() bool { return f.connCount() > before }) {
 		t.Fatalf("시도가 이어지지 않았다 (연결 %d회)", f.connCount())
 	}
 }

@@ -14,13 +14,14 @@ import (
 // (1) 타입 구조체와 (2) Raw 맵을 함께 채운다. 여기서 맵으로 풀면 타입 쪽이 다시
 // 직렬화를 거쳐야 한다.
 type Delivery struct {
-	Type   string          // 실시간 항목 (0B 등)
+	Type   string          // 실시간 항목 (0B·02·S2 등)
 	Name   string          // 실시간 항목명
 	Item   string          // 종목코드
+	StexTp string          // 거래소구분. 미국 조건검색 푸시에만 온다 — realPayload 의 주석 참고
 	Values json.RawMessage // FID → 값
 	Time   time.Time       // 수신 시각
-	// Err 은 *GapError · *ReconnectingError · *SlowConsumerError 다.
-	// 이때 나머지 필드는 비어 있다.
+	// Err 은 *GapError · *ReconnectingError · *SlowConsumerError ·
+	// *UnroutedConditionPushError 다. 이때 나머지 필드는 비어 있다.
 	Err error
 }
 
@@ -28,11 +29,31 @@ type Delivery struct {
 //
 // values 는 **맵**이다(FID 숫자가 키). 스펙은 LIST 라고 적었지만 문서 오류다 —
 // tools/spec/SOURCE.md 의 "WebSocket 규약" 절 참고.
+//
+// StexTp 는 values **바깥**에 붙는 봉투 필드다. usa20290 의 푸시 예제에만 나오고
+// (`"stexTp":"ND"`) 실시간 23종에는 없다. 읽지 않으면 미국 종목의 거래소 구분을 어떤
+// 경로로도 얻을 수 없어 — 조회 응답에서는 커스텀 UnmarshalJSON 까지 써서 얻는 값이다 —
+// 여기서 봉투째 싣고 stream.Event 의 같은 이름 자리로 넘긴다. FID 가 아니므로 Raw 에
+// 섞지 않는다(Raw 의 열쇠는 FID 숫자라는 약속이 깨진다).
 type realPayload struct {
-	Type   string          `json:"type"`
-	Name   string          `json:"name"`
-	Item   string          `json:"item"`
-	Values json.RawMessage `json:"values"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+	Item string `json:"item"`
+	// 거래소구분을 두 철자로 받는다. 푸시 예제는 stexTp 지만 같은 API 의 조회 응답은
+	// stex_tp 로 온다 — 서버가 같은 값을 두 철자로 쓰는 자리라, 하나만 받으면 반대쪽이
+	// 올 때 조용히 빈다. 조회 응답 쪽도 같은 이유로 둘 다 받는다
+	// (overseas/condition 의 RequestOverseasRealtimeConditionSearchDataItem.UnmarshalJSON).
+	StexTpCamel string          `json:"stexTp"`
+	StexTpSnake string          `json:"stex_tp"`
+	Values      json.RawMessage `json:"values"`
+}
+
+// stexTp 는 두 철자 중 온 것을 돌려준다.
+func (p realPayload) stexTp() string {
+	if p.StexTpCamel != "" {
+		return p.StexTpCamel
+	}
+	return p.StexTpSnake
 }
 
 type subKey struct{ typ, item string }
@@ -63,7 +84,14 @@ type sub struct {
 // subMu 를 들고 부른다.
 func (s *sub) latchGap(since, until time.Time) {
 	if s.pendingGap == nil {
-		s.pendingGap = &GapError{Since: since, Until: until}
+		// Resubscribed 로 실시간과 조건검색을 가른다. 실시간은 재연결이 REG 를 다시 보내
+		// 등록이 살아 있지만, 조건검색은 요청 자체가 등록이라 되살릴 REG 가 없다 —
+		// 같은 타입에 같은 문장으로 오면 ev.Err != nil 하나로 처리하는 핸들러가 둘을
+		// 구분하지 못한다. GapError 의 주석 참고.
+		s.pendingGap = &GapError{
+			Since: since, Until: until,
+			Resubscribed: s.key.typ != conditionType,
+		}
 		return
 	}
 	if since.Before(s.pendingGap.Since) {
@@ -250,19 +278,78 @@ func (c *Conn) routeReal(env envelope) {
 		//
 		// 조건검색 구독이 하나도 없으면 풀지 않는다. 실시간 푸시는 초당 여러 건이 오는데
 		// 아무도 듣지 않는 열쇠를 꺼내자고 그때마다 맵을 하나씩 만들 이유가 없다.
+		seq := ""
 		if cond {
-			if seq := fieldOf(p.Values, condSeqFID); seq != "" {
+			if seq = fieldOf(p.Values, condSeqFID); seq != "" {
 				c.subMu.Lock()
 				list = append(list, c.subs[conditionKey(seq)]...)
 				c.subMu.Unlock()
 			}
 		}
+
+		// 조건검색 푸시가 어디에도 닿지 못했으면 **말한다.**
+		//
+		// 841 이 빠졌거나 어느 구독과도 짝이 맞지 않으면 이 푸시는 갈 곳이 없다 —
+		// 실시간 지도에도 02·S2 타입은 없으니 (타입, 종목) 쪽도 비어 있다. 예전에는
+		// 여기서 그냥 버렸다. 로그도 카운터도 에러도 없어서, 사용자는 그것을
+		// "조건에 걸린 종목이 없다" 와 구분할 수 없었다 — 이 라이브러리에서 구멍이
+		// 소리 없이 닫히는 유일한 자리였다.
+		//
+		// 살아 있는 조건검색 구독 전체에 흘린다. 어느 구독의 것이었는지 모르니
+		// 고를 수가 없다 — 한 곳에만 흘리려면 그 자체가 추측이 된다.
+		//
+		// 조건검색 구독이 하나도 없으면(cond == false) 알릴 곳 자체가 없다. 그 상태로도
+		// 푸시는 올 수 있다 — ctx 취소는 해제가 아니라서, 채널을 닫고 CNSRCLR 를 보내지
+		// 않으면 서버는 계속 민다. 말할 상대가 없는 것이지 감추는 것이 아니다.
+		if cond && p.Name == conditionType && len(list) == 0 {
+			c.notifyUnroutedCondition(p, seq, now)
+			continue
+		}
+
 		for _, s := range list {
 			c.deliver(s, Delivery{
 				Type: p.Type, Name: p.Name, Item: p.Item,
-				Values: p.Values, Time: now,
+				StexTp: p.stexTp(), Values: p.Values, Time: now,
 			})
 		}
+	}
+}
+
+// notifyUnroutedCondition 은 갈 곳을 찾지 못한 조건검색 푸시를 살아 있는 조건검색
+// 구독 전체에 에러로 알린다.
+//
+// 자리를 모아 두고 락 밖에서 deliver 를 탄다 — deliver 가 제 손으로 subMu 를 잡고,
+// 닫힘·버림·구멍 래치를 실시간과 **같은 코드**로 처리한다. 채널이 가득 차면 이것도
+// 버려지지만 그때는 dropped 가 올라 *SlowConsumerError 로 드러난다. 조용히 사라지는
+// 경로가 남지 않는 것이 요점이다.
+//
+// 한 채널에 여러 자리가 걸려 있으면 한 번만 보낸다(notifyGap 과 같은 규칙).
+func (c *Conn) notifyUnroutedCondition(p realPayload, seq string, now time.Time) {
+	c.subMu.Lock()
+	var targets []*sub
+	seen := map[chan Delivery]bool{}
+	for key, list := range c.subs {
+		if key.typ != conditionType {
+			continue
+		}
+		for _, s := range list {
+			if s.closed || seen[s.ch] {
+				continue
+			}
+			seen[s.ch] = true
+			targets = append(targets, s)
+		}
+	}
+	c.subMu.Unlock()
+
+	if len(targets) == 0 {
+		return
+	}
+	err := &UnroutedConditionPushError{
+		Type: p.Type, Name: p.Name, Item: p.Item, Seq: seq,
+	}
+	for _, s := range targets {
+		c.deliver(s, Delivery{Err: err, Time: now})
 	}
 }
 

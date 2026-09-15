@@ -27,6 +27,11 @@ type (
 	ReconnectingError = wstransport.ReconnectingError
 	// SlowConsumerError 는 구독 채널이 가득 차 이벤트를 버렸다는 뜻이다.
 	SlowConsumerError = wstransport.SlowConsumerError
+	// UnroutedConditionPushError 는 조건검색 푸시가 갈 곳을 찾지 못했다는 뜻이다.
+	//
+	// 일련번호(FID 841)가 빠졌거나 어느 구독의 것과도 맞지 않은 경우다. 이것이 없으면
+	// 사용자는 그 상황을 "조건에 걸린 종목이 없다" 와 구분할 수 없다.
+	UnroutedConditionPushError = wstransport.UnroutedConditionPushError
 	// WSLoginError 는 WebSocket 로그인이 거부된 것이다.
 	WSLoginError = wstransport.LoginError
 	// WSAPIError 는 WebSocket 업무 오류(return_code != 0)다.

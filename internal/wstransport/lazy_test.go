@@ -228,3 +228,94 @@ func TestReconnect_끝나면_깃발이_내려간다(t *testing.T) {
 		t.Fatalf("재연결 뒤에도 깃발이 서 있다 (연결 %d회, reconnecting=%v)", f.connCount(), flag)
 	}
 }
+
+// **Critical 1 의 자리다.** Connect 없이 구독한 뒤 Close 하면 채널이 닫혀야 한다.
+//
+// 이 경로가 두 층 사이로 빠져 있었다. 조건검색 테스트는 c.Connect 를 **먼저** 부르고
+// (그러면 c.life 가 이미 있다), 이 파일의 게으른 연결 테스트는 Close 를 보지 않는다.
+// 그 사이에서 SubscribeCondition 은 — ensureConnected 를 부르지 않으므로 — 아직 연결이
+// 없는 상태로 lifeCtx() 를 잡았고, 예전 lifeCtx 는 그때 context.Background() 를 줬다.
+// 영영 끝나지 않는 컨텍스트다. Close 가 c.life 를 끊어도 정리 고루틴은 깨어나지 않아
+// 채널이 닫히지 않고, 소비자는 for range 에서 영원히 막힌다.
+//
+// 손으로 쓴 조건검색 두 파일이 정확히 이 순서로 부른다 — 첫 푸시를 잃지 않으려고
+// 요청보다 **먼저** 구독한다. 즉 갓 만든 Client 의 첫 호출이 늘 이 경로다.
+func TestSubscribeCondition_Connect_없이_구독하고_Close_하면_채널이_닫힌다(t *testing.T) {
+	// 서버가 없어도 된다 — SubscribeCondition 은 다이얼하지 않는다. 그것이 요점이다.
+	c := New("ws://never", "", &stubToken{token: "TKN"})
+
+	sub, err := c.SubscribeCondition(context.Background(), "4", 8)
+	if err != nil {
+		t.Fatalf("SubscribeCondition: %v", err)
+	}
+	_ = c.Close()
+
+	select {
+	case _, ok := <-sub:
+		if ok {
+			t.Fatal("닫히는 대신 무언가가 왔다")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Connect 없이 구독한 채널이 Close 뒤에도 닫히지 않았다")
+	}
+
+	// 자리도 내려가야 한다. 남으면 condSubs 가 영원히 줄지 않아, routeReal 이 실시간
+	// 푸시마다 841 을 꺼내는 일을 영영 계속한다.
+	ok := waitFor(3*time.Second, func() bool {
+		c.subMu.Lock()
+		defer c.subMu.Unlock()
+		return len(c.subs) == 0 && c.condSubs == 0
+	})
+	if !ok {
+		c.subMu.Lock()
+		subs, cond := len(c.subs), c.condSubs
+		c.subMu.Unlock()
+		t.Fatalf("구독 자리가 남았다: subs=%d condSubs=%d", subs, cond)
+	}
+}
+
+// 실시간 구독도 같은 규칙이다. 이쪽은 ensureConnected 를 부르므로 원래 안전했지만,
+// lifeCtx 를 고치면서 반대로 깨지지 않았는지 함께 못 박는다.
+func TestSubscribe_Connect_없이_구독하고_Close_하면_채널이_닫힌다(t *testing.T) {
+	f := newFakeServer(t)
+	c := New(f.wsURL(), "", &stubToken{token: "TKN"})
+
+	sub, err := c.Subscribe(context.Background(), "0B", []string{"005930"}, 8)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	waitPacket(t, f, "REG")
+	_ = c.Close()
+
+	select {
+	case _, ok := <-sub:
+		if ok {
+			for range sub {
+			}
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Close 뒤에도 채널이 닫히지 않았다")
+	}
+}
+
+// Close 가 지나간 뒤에 붙은 구독도 채널이 닫혀야 한다.
+//
+// lifeCtx 가 수명을 게으르게 만들게 되면서 생긴 자리다 — 아무 생각 없이 만들면 그
+// 수명은 이미 지나간 Close 를 놓쳐 영영 살아 있고, 채널은 영영 열린 채 남는다.
+func TestSubscribeCondition_Close_뒤에_구독해도_채널이_닫힌다(t *testing.T) {
+	c := New("ws://never", "", &stubToken{token: "TKN"})
+	_ = c.Close()
+
+	sub, err := c.SubscribeCondition(context.Background(), "4", 8)
+	if err != nil {
+		t.Fatalf("SubscribeCondition: %v", err)
+	}
+	select {
+	case _, ok := <-sub:
+		if ok {
+			t.Fatal("닫히는 대신 무언가가 왔다")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Close 뒤에 붙은 구독의 채널이 닫히지 않았다")
+	}
+}
